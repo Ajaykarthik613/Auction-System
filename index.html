@@ -1,0 +1,1169 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+  <script>
+    window.onerror = function (message, source, lineno, colno, error) {
+      const div = document.createElement('div');
+      div.style.position = 'fixed';
+      div.style.top = '0';
+      div.style.left = '0';
+      div.style.width = '100%';
+      div.style.background = 'rgba(255, 0, 0, 0.95)';
+      div.style.color = 'white';
+      div.style.padding = '16px';
+      div.style.zIndex = '999999';
+      div.style.fontFamily = 'monospace';
+      div.style.fontSize = '13.5px';
+      div.style.whiteSpace = 'pre-wrap';
+      div.style.boxShadow = '0 4px 20px rgba(0,0,0,0.5)';
+      div.innerHTML = '<strong>GLOBAL RUNTIME ERROR:</strong> ' + message + '<br>Source: ' + source + ':' + lineno + ':' + colno + (error ? '<pre style="margin-top:8px;color:#ffcccc;">' + error.stack + '</pre>' : '');
+      document.body.appendChild(div);
+      return false;
+    };
+    window.onunhandledrejection = function (event) {
+      const div = document.createElement('div');
+      div.style.position = 'fixed';
+      div.style.top = '0';
+      div.style.left = '0';
+      div.style.width = '100%';
+      div.style.background = 'rgba(255, 100, 0, 0.95)';
+      div.style.color = 'white';
+      div.style.padding = '16px';
+      div.style.zIndex = '999999';
+      div.style.fontFamily = 'monospace';
+      div.style.fontSize = '13.5px';
+      div.style.whiteSpace = 'pre-wrap';
+      div.style.boxShadow = '0 4px 20px rgba(0,0,0,0.5)';
+      div.innerHTML = '<strong>UNHANDLED REJECTION:</strong> ' + event.reason + (event.reason && event.reason.stack ? '<pre style="margin-top:8px;color:#ffeedd;">' + event.reason.stack + '</pre>' : '');
+      document.body.appendChild(div);
+    };
+  </script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KPL Auction Portal — Kasadara</title>
+  <meta name="description" content="KPL & SmashFest Auction Portal — Build your dream team">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="app.js"></script>
+</head>
+
+<body>
+  <div id="app" class="app">
+
+    <!-- ═══════════════════════════════════════════════════════════ VERTICAL SIDEBAR NAV ═══════════════════════════════════════════════════════════ -->
+    <aside id="nav-bar" class="nav-bar hidden">
+      <!-- Top: Logo & Round Badge -->
+      <div class="sidebar-top">
+        <div class="sidebar-logo">
+          <div class="logo-icon small-icon">
+            <span class="lp lp1"></span><span class="lp lp2"></span>
+            <span class="lp lp3"></span><span class="lp lp4"></span>
+            <span class="lp lp5"></span><span class="ld"></span>
+          </div>
+          <div class="sidebar-logo-text">
+            <div class="logo-name">KASADARA</div>
+            <div class="logo-sub">AUCTION</div>
+          </div>
+        </div>
+        <div id="round-badge" class="round-badge">ROUND 1</div>
+      </div>
+
+      <!-- Center: Main Navigation Tabs -->
+      <nav class="nav-tabs">
+        <button class="tab-btn active" data-view="pool" title="Live Pool">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <circle cx="12" cy="12" r="3" />
+          </svg>
+          <span class="tab-label">Live Pool</span>
+        </button>
+        <button class="tab-btn" data-view="dashboard" title="Leaderboard & Summary">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round">
+            <line x1="18" y1="20" x2="18" y2="10" />
+            <line x1="12" y1="20" x2="12" y2="4" />
+            <line x1="6" y1="20" x2="6" y2="14" />
+          </svg>
+          <span class="tab-label">Leaderboard</span>
+        </button>
+        <button class="tab-btn" data-view="teams" title="Team Trees">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+          </svg>
+          <span class="tab-label">Team Trees</span>
+        </button>
+        <button class="tab-btn" data-view="admin" title="Admin Console">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14" />
+            <path d="M15.54 8.46a5 5 0 0 1 0 7.07M8.46 8.46a5 5 0 0 0 0 7.07" />
+          </svg>
+          <span class="tab-label">Admin Console</span>
+        </button>
+      </nav>
+
+      <!-- Bottom: Theme & Settings & Back -->
+      <div class="sidebar-bottom">
+        <button id="btn-back" class="nav-back-btn" title="Exit to Tournaments">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
+            stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6" />
+          </svg>
+          <span class="back-label">Tournaments</span>
+        </button>
+
+        <div class="theme-group">
+          <button id="btn-theme-light" class="theme-btn" title="Light Theme">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+              stroke-linejoin="round">
+              <circle cx="12" cy="12" r="5" />
+              <line x1="12" y1="1" x2="12" y2="3" />
+              <line x1="12" y1="21" x2="12" y2="23" />
+              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+              <line x1="1" y1="12" x2="3" y2="12" />
+              <line x1="21" y1="12" x2="23" y2="12" />
+              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+            </svg>
+          </button>
+          <button id="btn-theme-dark" class="theme-btn on" title="Dark Theme">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+              stroke-linejoin="round">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+            </svg>
+          </button>
+        </div>
+
+        <div class="admin-menu-wrap" id="admin-menu-wrap">
+          <button class="admin-menu-btn" id="admin-menu-btn" title="Profile Options">
+            <span class="admin-avatar-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
+            </span>
+            <span class="admin-label">Admin</span>
+            <svg class="caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+              stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
+          <div class="admin-dropdown hidden" id="admin-dropdown">
+            <button class="drop-item" id="drop-pool">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+              Live Pool
+            </button>
+            <button class="drop-item" id="drop-admin">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round">
+                <circle cx="12" cy="12" r="3" />
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14" />
+              </svg>
+              Admin Console
+            </button>
+            <hr class="drop-hr">
+            <button class="drop-item danger" id="drop-reset">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round">
+                <polyline points="1 4 1 10 7 10" />
+                <path d="M3.51 15a9 9 0 1 0 .49-3.73" />
+              </svg>
+              Reset Auction
+            </button>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ═══════════════════════════════════════════════════════════ MAIN CONTENT ═══════════════════════════════════════════════════════════ -->
+    <main id="main" class="main">
+
+      <!-- ── 1. TOURNAMENT SELECTION ── -->
+      <section id="view-selection" class="view active">
+        <div class="sel-bg">
+          <div class="sel-ray left"></div>
+          <div class="sel-ray right"></div>
+        </div>
+
+        <div class="sel-header">
+          <div class="kasadara-logo">
+            <div class="logo-icon">
+              <span class="lp lp1"></span><span class="lp lp2"></span>
+              <span class="lp lp3"></span><span class="lp lp4"></span>
+              <span class="lp lp5"></span><span class="ld"></span>
+            </div>
+            <div class="logo-text">
+              <div class="logo-name">KASADARA</div>
+              <div class="logo-sub">AUCTION PORTAL</div>
+            </div>
+          </div>
+          <h1 class="sel-title">Select Tournament</h1>
+          <p class="sel-desc">Choose a tournament to manage, bid and build your champion team.</p>
+        </div>
+
+        <div class="sel-cards">
+          <!-- Cricket -->
+          <div id="card-cricket" class="sel-card cricket-card">
+            <div class="sel-art cricket-art">
+              <img src="images/cricket_player_art.png" alt="Cricket" onerror="this.style.display='none'">
+              <div class="art-glow cricket-glow"></div>
+            </div>
+            <div class="sel-info">
+              <div class="sel-sport-icon cricket-icon">🏏</div>
+              <h3 class="sel-card-title">Cricket Auction</h3>
+              <div class="sel-tag cricket-tag">Premier Cricket League</div>
+              <p class="sel-card-desc">Bid for the best players and<br>build your ultimate cricket team.</p>
+              <button class="sel-enter-btn">ENTER &nbsp;→</button>
+            </div>
+          </div>
+
+          <!-- SmashFest -->
+          <div id="card-smashfest" class="sel-card smash-card">
+            <div class="sel-info">
+              <div class="sel-sport-icon smash-icon">🏸</div>
+              <h3 class="sel-card-title">1234</h3>
+              <div class="sel-tag smash-tag">Ultimate Badminton Challenge</div>
+              <p class="sel-card-desc">Compete, bid and dominate<br>the badminton arena.</p>
+              <button class="sel-enter-btn">ENTER &nbsp;→</button>
+            </div>
+            <div class="sel-art smash-art">
+              <img src="images/badminton_player_art.png" alt="Badminton" onerror="this.style.display='none'">
+              <div class="art-glow smash-glow"></div>
+            </div>
+          </div>
+        </div>
+
+        <button id="btn-reset-all" class="reset-btn">↺ &nbsp; RESET ALL AUCTION DATA</button>
+      </section>
+
+      <!-- ── 2. CAPTAIN SETUP ── -->
+      <section id="view-captain" class="view hidden">
+        <div class="page-header">
+          <div class="page-subtitle">KASADARA AUCTION PORTAL</div>
+          <h2 class="page-title">Assign Team Captains</h2>
+        </div>
+
+        <div class="card" style="margin-bottom:20px;">
+          <h3 class="card-title">📂 Import Roster from Excel / CSV</h3>
+          <p class="card-desc">Upload your .xlsx / .xls / .csv file. The system will map names, IDs and categories
+            automatically.</p>
+          <div class="file-row">
+            <input type="file" id="roster-file" accept=".xlsx,.xls,.csv" style="display:none">
+            <label for="roster-file" class="file-btn">CHOOSE FILE</label>
+            <span id="file-status" class="file-status">No file chosen</span>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom:20px;">
+          <h3 class="card-title">⚙️ Round Category Sequence</h3>
+          <p class="card-desc">Determine which category is auctioned first. Use the arrows to set the sequence (the top
+            category will be Round 1).</p>
+          <div id="round-order-list" class="round-order-list">
+            <!-- Populated dynamically -->
+          </div>
+        </div>
+
+        <div class="card">
+          <p class="card-desc">Assign a unique captain for each team before launching the auction.</p>
+          <div id="captain-selectors" class="captain-grid"></div>
+          <button id="btn-launch" class="launch-btn">LAUNCH AUCTION <span>→</span></button>
+        </div>
+      </section>
+
+      <!-- ── 3. WELCOME / HUB ── -->
+      <section id="view-welcome" class="view hidden">
+        <!-- Background artworks -->
+        <div class="welcome-art-bg welcome-art-left">
+          <img id="welcome-hero-art-left" src="images/smashing logo.PNG" alt="Hero Art Left">
+        </div>
+        <div class="welcome-art-bg welcome-art-right">
+          <img id="welcome-hero-art-right" src="images/smashing logo.PNG" alt="Hero Art Right">
+        </div>
+
+        <div class="welcome-content">
+          <h1 id="welcome-title" class="welcome-title">SMASHFEST</h1>
+          <p id="welcome-subtitle" class="welcome-subtitle">🏸 CHAMPIONSHIP AUCTION 🏸</p>
+          <p class="welcome-desc">Build your dream team.<br>Dominate the tournament.</p>
+          <div class="welcome-btns">
+            <button id="btn-enter-auction" class="btn-enter">ENTER AUCTION <span>→</span></button>
+            <button id="btn-tournament-info" class="btn-info">TOURNAMENT INFORMATION <span
+                class="info-i">i</span></button>
+          </div>
+        </div>
+
+        <div id="welcome-overview" class="kpi-row hidden" style="margin-top: 10px; margin-bottom: 30px;"></div>
+
+        <!-- Live Activity Panel -->
+        <div id="welcome-activity-panel" class="live-activity-panel hidden">
+          <div class="lap-header">
+            <div class="lap-title"><span class="lap-dot">●</span> LIVE ACTIVITY</div>
+            <button id="btn-welcome-view-all" class="lap-view-all">View All &nbsp;→</button>
+          </div>
+          <div id="welcome-activity-list" class="lap-list">
+            <!-- Live Activity rows will be rendered here dynamically -->
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ── 4. PLAYER POOL ── -->
+      <section id="view-pool" class="view hidden">
+        <div class="pool-filters">
+          <button class="filter-btn active" data-filter="all">ALL</button>
+          <button class="filter-btn" data-filter="available">AVAILABLE</button>
+          <button class="filter-btn" data-filter="sold">SOLD</button>
+          <button class="filter-btn" data-filter="unsold">UNSOLD</button>
+        </div>
+        <div id="pool-grid" class="pool-grid"></div>
+      </section>
+
+      <!-- ── 5. PLAYER DETAIL / AUCTION ── -->
+      <section id="view-detail" class="view hidden">
+        <div class="detail-layout">
+
+          <!-- Card flip area -->
+          <div class="flip-wrap">
+            <div id="flip-card" class="flip-card">
+              <div class="card-face card-front">
+                <div class="reveal-text">Revealing...</div>
+              </div>
+              <div class="card-face card-back">
+                <div class="auction-detail-shell">
+                  <aside class="auction-profile-panel">
+                    <div class="panel-title">PLAYER PROFILE</div>
+
+                    <div class="holo-player-card">
+                      <div class="holo-ovr-badge"><span>OVR</span><strong id="player-ovr">92</strong></div>
+                      <div class="holo-level-badge" id="player-level">PRO</div>
+                      <img id="player-img" src="" alt="" onerror="this.src='images/default.png'">
+                      <div class="holo-player-footer">
+                        <h3 id="player-display-name">Player Name</h3>
+                        <span id="player-lottery-badge">LOTTERY #1</span>
+                      </div>
+                    </div>
+
+                    <div class="profile-info-card">
+                      <div class="profile-row"><span class="profile-label">Role</span><strong id="player-role">PRO
+                          PLAYER</strong></div>
+                      <div class="profile-row"><span class="profile-label">Gender</span><strong
+                          id="player-gender">Male</strong></div>
+                      <div class="profile-row"><span class="profile-label">EMP ID</span><strong
+                          id="player-emp-id">K1000</strong></div>
+                      <div class="profile-row"><span class="profile-label">Player</span><strong id="player-name">Player
+                          Name</strong></div>
+                      <div class="profile-row"><span class="profile-label">Auction ID</span><strong
+                          id="player-id-badge">ID: K1000 &#8226; LOTTERY #1</strong></div>
+                    </div>
+
+                    <div class="holo-prize-box">
+                      <span class="holo-prize-lbl">BASE PRICE</span>
+                      <div class="holo-prize-val-row">
+                        <span class="holo-prize-val" id="player-base-price">&#8377; 3.00 Lakhs</span>
+                      </div>
+                    </div>
+                  </aside>
+
+                  <section class="live-bid-panel">
+                    <div class="live-bid-header">
+                      <div>
+                        <span class="live-panel-title">LIVE BIDDING</span>
+                        <span class="live-dot"></span>
+                      </div>
+                      <button id="btn-timer" class="timer-btn">&#9208; Pause</button>
+                    </div>
+
+                    <div class="timer-widget">
+                      <div class="timer-topline">
+                        <div id="timer-phase" class="timer-phase">BIDDING</div>
+                        <div class="timer-clock"><strong id="timer-num" class="timer-num">15</strong><span>Time
+                            Left</span></div>
+                      </div>
+                      <div class="timer-bar-bg">
+                        <div id="timer-fill" class="timer-fill"></div>
+                      </div>
+                    </div>
+
+                    <div class="bid-amount-stage">
+                      <button type="button" class="bid-step-control" data-step="-0.25"
+                        aria-label="Decrease bid amount">&minus;</button>
+                      <h2 id="ticket-amount">&#8377; 3.00 Lakhs</h2>
+                      <button type="button" class="bid-step-control" data-step="0.25"
+                        aria-label="Increase bid amount">+</button>
+                    </div>
+
+                    <div class="bid-step-row" aria-label="Bid amount increments">
+                      <button type="button" data-step="0.25">+0.25L</button>
+                      <button type="button" data-step="0.50">+0.50L</button>
+                      <button type="button" data-step="1.00">+1.00L</button>
+                      <button type="button" data-step="2.00">+2.00L</button>
+                      <button type="button" data-step="5.00">+5.00L</button>
+                    </div>
+
+                    <div class="bid-info-grid">
+                      <div class="bid-ticket">
+                        <div class="ticket-emoji" id="ticket-emoji">&#127992;</div>
+                        <div class="ticket-info">
+                          <span class="ticket-lbl">CURRENT HIGHEST BID BY</span>
+                          <h3 id="ticket-team">NO BIDS YET</h3>
+                          <small id="ticket-team-name">Select a team below</small>
+                        </div>
+                      </div>
+                      <div class="bid-history-card">
+                        <span class="ticket-lbl">BID HISTORY</span>
+                        <div id="bid-history-list" class="bid-history-list">
+                          <div class="bid-history-empty">No bids yet</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="action-row">
+                      <button id="btn-unsold" class="btn-unsold">UNSOLD</button>
+                      <button id="btn-sell" class="btn-sell">SELL</button>
+                    </div>
+
+                    <div class="team-select-panel">
+                      <div class="team-select-title">SELECT TEAM TO BID</div>
+                      <div id="team-bid-row" class="team-bid-row"></div>
+                    </div>
+                  </section>
+                </div>
+              </div>
+            </div>
+
+            <!-- Sold stamp -->
+            <div id="sold-stamp" class="sold-stamp hidden">
+              <div class="stamp-circle">
+                <div class="stamp-dashed"></div>
+                <div class="stamp-content">
+                  <span id="stamp-text">SOLD</span>
+                  <span id="stamp-team"></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── 6. LEADERBOARD & SUMMARY ── -->
+      <section id="view-dashboard" class="view hidden">
+        <div class="view-heading-row"
+          style="display:flex; justify-content:space-between; align-items:center; width:100%; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
+          <h2 class="view-heading" style="margin-bottom:0; font-size:24px; font-weight:900; letter-spacing:0.5px;">🏆
+            LIVE LEADERBOARD</h2>
+          <div style="display:flex; gap:10px;">
+            <button id="btn-export-excel" class="file-btn"
+              style="padding: 8px 18px; font-size: 14px; font-weight:700; background:rgba(0,255,135,0.08); border-color:rgba(0,255,135,0.25); color:var(--green);">📥
+              EXPORT EXCEL</button>
+            <button id="btn-export-csv" class="file-btn"
+              style="padding: 8px 18px; font-size: 14px; font-weight:700; background:rgba(236,0,140,0.08); border-color:rgba(236,0,140,0.25); color:var(--pink);">📥
+              EXPORT CSV</button>
+          </div>
+        </div>
+
+        <!-- Top KPI Row: 4 Cards -->
+        <div class="dashboard-kpi-grid">
+          <div class="db-kpi-card" style="border-left: 3px solid var(--gold);">
+            <div class="db-kpi-icon-wrap"
+              style="background: rgba(255,215,0,0.1); border-color: rgba(255,215,0,0.2); color: var(--gold);">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
+                stroke-linejoin="round" style="width:22px;height:22px;">
+                <rect x="2" y="4" width="20" height="16" rx="2" ry="2" />
+                <line x1="12" y1="4" x2="12" y2="20" />
+                <line x1="2" y1="12" x2="22" y2="12" />
+              </svg>
+            </div>
+            <div class="db-kpi-info">
+              <span class="db-kpi-lbl">TOTAL BUDGET</span>
+              <span id="stat-total-budget" class="db-kpi-val">₹ 0.00 Cr</span>
+              <span class="db-kpi-desc">Total Tournament Budget</span>
+            </div>
+          </div>
+
+          <div class="db-kpi-card" style="border-left: 3px solid var(--accent);">
+            <div class="db-kpi-donut-container">
+              <div id="stat-util-donut" class="db-kpi-donut" style="--pct: 0%;">
+                <span id="stat-util-text">0%</span>
+              </div>
+            </div>
+            <div class="db-kpi-info" style="margin-left: 14px;">
+              <span class="db-kpi-lbl">BUDGET UTILIZED</span>
+              <span id="stat-util" class="db-kpi-val">₹ 0.00 Cr</span>
+              <span class="db-kpi-desc">Spent So Far</span>
+            </div>
+          </div>
+
+          <div class="db-kpi-card" style="border-left: 3px solid var(--pink);">
+            <div class="db-kpi-icon-wrap"
+              style="background: rgba(236,0,140,0.1); border-color: rgba(236,0,140,0.2); color: var(--pink);">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
+                stroke-linejoin="round" style="width:22px;height:22px;">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M12 8v4l3 3" />
+              </svg>
+            </div>
+            <div class="db-kpi-info">
+              <span class="db-kpi-lbl">AVG SPEND / PLAYER</span>
+              <span id="stat-avg" class="db-kpi-val">₹ 0.00 L</span>
+              <span class="db-kpi-desc">Average</span>
+            </div>
+          </div>
+
+          <div class="db-kpi-card" style="border-left: 3px solid var(--green);">
+            <div class="db-kpi-icon-wrap"
+              style="background: rgba(0,255,135,0.1); border-color: rgba(0,255,135,0.2); color: var(--green);">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
+                stroke-linejoin="round" style="width:22px;height:22px;">
+                <polyline points="9 11 12 14 22 4" />
+                <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+              </svg>
+            </div>
+            <div class="db-kpi-info">
+              <span class="db-kpi-lbl">PLAYERS SOLD</span>
+              <span id="stat-sold-players" class="db-kpi-val">0</span>
+              <span class="db-kpi-desc">Total Players Sold</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Main Columns Grid Layout -->
+        <div class="dashboard-main-grid">
+          <!-- Left Column: Team Summary Table & Unsold Players Directory -->
+          <div style="display:flex; flex-direction:column; gap:20px;">
+            <div class="db-block table-block">
+              <div class="db-block-header">
+                <span class="db-block-title">💼 TEAM SUMMARY</span>
+              </div>
+              <div class="table-wrap" style="border:none; border-radius:0;">
+                <table class="data-table dashboard-table">
+                  <thead>
+                    <tr>
+                      <th>TEAM</th>
+                      <th style="text-align:center;">SOLD</th>
+                      <th>SPENT</th>
+                      <th>REMAINING</th>
+                      <th style="text-align:center; width: 90px;">PURSE USED</th>
+                    </tr>
+                  </thead>
+                  <tbody id="dashboard-tbody">
+                    <!-- Dynamically populated -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Unsold Players Directory inside Left Column -->
+            <div class="db-block unsold-directory-block" style="width:100%;">
+              <div class="db-block-header">
+                <span class="db-block-title">👥 UNSOLD PLAYERS</span>
+              </div>
+              <div id="unsold-grid" class="unsold-grid dashboard-unsold-grid">
+                <!-- Dynamically populated -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Right Column: Visual Charts & Overviews -->
+          <div class="db-right-column">
+            <!-- Budget Utilization Donut Diagram Card -->
+            <div class="db-block donut-overview-block">
+              <div class="db-block-header">
+                <span class="db-block-title">📊 BUDGET UTILIZATION OVERVIEW</span>
+              </div>
+              <div class="db-donut-layout">
+                <div class="db-donut-wheel-wrap">
+                  <div id="db-donut-wheel" class="db-donut-wheel" style="--conic-stops: transparent 0%;">
+                    <div class="db-donut-wheel-inner">
+                      <span id="db-donut-wheel-val">₹ 0.00 Cr</span>
+                      <small>Spent</small>
+                    </div>
+                  </div>
+                </div>
+                <div id="db-donut-legend" class="db-donut-legend">
+                  <!-- Legend items with colors dynamically generated -->
+                </div>
+              </div>
+            </div>
+
+            <!-- Spend Comparison Area Curve Graph -->
+            <div class="db-block spend-comparison-block">
+              <div class="db-block-header">
+                <span class="db-block-title">📈 SPEND COMPARISON <small
+                    style="color:var(--text2); font-size:10px; font-weight:normal; margin-left:6px;">(in
+                    Crores)</small></span>
+              </div>
+              <div class="db-graph-container">
+                <div id="db-graph-y-axis" class="db-graph-y-axis">
+                  <span>10 Cr</span>
+                  <span>8 Cr</span>
+                  <span>6 Cr</span>
+                  <span>4 Cr</span>
+                  <span>2 Cr</span>
+                  <span>0</span>
+                </div>
+                <div class="db-graph-content-wrapper">
+                  <svg id="db-graph-svg" class="db-graph-svg" preserveAspectRatio="none" viewBox="0 0 400 130">
+                    <defs>
+                      <linearGradient id="graph-gradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="var(--pink)" stop-opacity="0.45" />
+                        <stop offset="100%" stop-color="var(--pink)" stop-opacity="0.0" />
+                      </linearGradient>
+                    </defs>
+                    <path id="db-graph-area" d="M 0 130 L 0 130 Z" fill="url(#graph-gradient)"></path>
+                    <path id="db-graph-line" d="M 0 130 L 0 130 Z" fill="none" stroke="var(--pink)" stroke-width="2.5"
+                      stroke-linecap="round"></path>
+                  </svg>
+                  <div id="db-graph-values" class="db-graph-values">
+                    <!-- Dynamically floated values -->
+                  </div>
+                  <div id="db-graph-x-axis" class="db-graph-x-axis">
+                    <!-- Dynamically populated team labels -->
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Tournament Overview Stats Block -->
+            <div class="db-block overview-stats-block">
+              <div class="db-block-header">
+                <span class="db-block-title">🏆 TOURNAMENT OVERVIEW</span>
+              </div>
+              <div class="db-overview-stat-grid">
+                <div class="db-overview-mini-card">
+                  <span class="lbl">TOTAL PLAYERS</span>
+                  <span id="db-over-total" class="val" style="color:var(--accent);">0</span>
+                </div>
+                <div class="db-overview-mini-card">
+                  <span class="lbl">TEAMS</span>
+                  <span id="db-over-teams" class="val" style="color:var(--cyan);">0</span>
+                </div>
+                <div class="db-overview-mini-card">
+                  <span class="lbl">SOLD PLAYERS</span>
+                  <span id="db-over-sold" class="val" style="color:var(--green);">0</span>
+                </div>
+                <div class="db-overview-mini-card">
+                  <span class="lbl">UNSOLD PLAYERS</span>
+                  <span id="db-over-unsold" class="val" style="color:var(--gold);">0</span>
+                </div>
+                <div class="db-overview-mini-card">
+                  <span class="lbl">TOTAL SPENT</span>
+                  <span id="db-over-spent" class="val">₹ 0.00 Cr</span>
+                </div>
+                <div class="db-overview-mini-card">
+                  <span class="lbl">REMAINING BUDGET</span>
+                  <span id="db-over-remaining" class="val">₹ 0.00 Cr</span>
+                </div>
+                <div class="db-overview-mini-card">
+                  <span class="lbl">AVG SPENT / TEAM</span>
+                  <span id="db-over-spent" class="val" style="display:none;"></span>
+                  <span id="db-over-avg-team" class="val">₹ 0.00 Cr</span>
+                </div>
+                <div class="db-overview-mini-card">
+                  <span class="lbl">AVG SPENT / PLAYER</span>
+                  <span id="db-over-avg-player" class="val">₹ 0.00 L</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 7. TEAM TREES -->
+      <section id="view-teams" class="view hidden">
+        <div class="team-command-header">
+          <div>
+            <h2 class="page-title">Team Trees</h2>
+            <p class="team-command-subtitle">Visualize your team structure and player distribution</p>
+          </div>
+          <div class="team-command-actions">
+            <button id="btn-export-all-teams" class="file-btn">Download All Teams</button>
+            <button id="btn-export-single-team" class="file-btn">Download Squad</button>
+          </div>
+        </div>
+
+        <div id="team-cards-grid" class="team-selector-grid"></div>
+
+        <div id="team-tree-view" class="team-command-layout">
+          <div class="team-tree-panel">
+            <div class="tree-panel-header">
+              <div>
+                <span class="tree-panel-kicker">Hierarchy Map</span>
+                <h3 id="tree-heading">Team Tree</h3>
+              </div>
+              <span id="tree-team-status" class="tree-team-status">Live Composition</span>
+            </div>
+            <div id="tree-players" class="tree-players"></div>
+          </div>
+
+          <aside class="team-insights-panel">
+            <div class="team-insight-card">
+              <h3>Team Summary</h3>
+              <div id="team-summary-content" class="team-summary-content"></div>
+            </div>
+            <div class="team-insight-card">
+              <h3>Level Distribution</h3>
+              <div id="level-distribution-content" class="level-distribution-content"></div>
+            </div>
+            <div class="team-insight-card">
+              <h3>Validation Status</h3>
+              <div id="validation-status-content" class="validation-status-content"></div>
+            </div>
+          </aside>
+        </div>
+
+        <div class="team-info-bar">Click any player to view detailed information</div>
+      </section>
+      <!-- ── 8. ADMIN CONSOLE ── -->
+      <section id="view-admin" class="view hidden">
+        <div class="admin-container">
+          <!-- ── ADMIN SIDEBAR ── -->
+          <aside class="admin-sidebar">
+            <div class="admin-sidebar-header">
+              <span class="admin-sidebar-icon">🛠️</span>
+              <div class="admin-sidebar-title-group">
+                <span class="admin-sidebar-subtitle">CONSOLE</span>
+                <h3 class="admin-sidebar-title">Administration</h3>
+              </div>
+            </div>
+            <nav class="admin-sidebar-nav">
+              <button class="admin-sidebar-btn active" data-module="registry">
+                <span class="btn-icon">📋</span> Player Registry
+              </button>
+              <button class="admin-sidebar-btn" data-module="teams">
+                <span class="btn-icon">👥</span> Team Management
+              </button>
+              <button class="admin-sidebar-btn" data-module="captains">
+                <span class="btn-icon">👑</span> Captain Assignment
+              </button>
+              <button class="admin-sidebar-btn" data-module="rounds">
+                <span class="btn-icon">🏆</span> Round Management
+              </button>
+              <button class="admin-sidebar-btn" data-module="import">
+                <span class="btn-icon">📂</span> Import Roster
+              </button>
+              <button class="admin-sidebar-btn" data-module="config">
+                <span class="btn-icon">⚙️</span> Auction Config
+              </button>
+              <button class="admin-sidebar-btn" data-module="settings">
+                <span class="btn-icon">🔧</span> Settings
+              </button>
+            </nav>
+          </aside>
+
+          <!-- ── MAIN CONTENT AREA ── -->
+          <main class="admin-main-content">
+            <!-- 1. Player Registry Module -->
+            <div id="module-registry" class="admin-module-panel">
+              <div class="admin-card-header">
+                <h2 class="module-title">📋 Player Registry & Directory</h2>
+                <div class="registry-controls-top" style="display:flex; gap:10px;">
+                  <button id="btn-toggle-add-player-form" class="admin-action-btn">＋ ADD PLAYER MANUALLY</button>
+                  <button id="btn-admin-export-excel" class="admin-action-btn"
+                    style="background: rgba(0,255,135,0.08); border-color: rgba(0,255,135,0.25); color: var(--green);">📥
+                    EXPORT EXCEL</button>
+                  <button id="btn-admin-export-csv" class="admin-action-btn"
+                    style="background: rgba(0,220,255,0.08); border-color: rgba(0,220,255,0.25); color: var(--accent);">📥
+                    EXPORT CSV</button>
+                </div>
+              </div>
+
+              <!-- Manual Add Player (Collapsible) -->
+              <div id="panel-add-player-manual" class="admin-card collapsible-card hidden" style="margin-bottom: 20px;">
+                <h3 class="admin-card-title">➕ Add New Player</h3>
+                <form id="form-add-player" class="admin-form">
+                  <div class="form-group"><label>Player Name</label><input type="text" id="inp-player-name"
+                      placeholder="e.g. Rajesh Kumar" required></div>
+                  <div class="form-row" style="grid-template-columns: repeat(3, 1fr);">
+                    <div class="form-group">
+                      <label>Category</label>
+                      <select id="inp-player-level" class="admin-select">
+                        <option value="Beginner">Beginner</option>
+                        <option value="Intermediate">Intermediate</option>
+                        <option value="Pro">Pro</option>
+                      </select>
+                    </div>
+                    <div class="form-group">
+                      <label>Gender</label>
+                      <select id="inp-player-gender" class="admin-select">
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                      </select>
+                    </div>
+                    <div class="form-group"><label>Base Price (L)</label><input type="number" id="inp-player-price"
+                        value="3" step="0.1" required></div>
+                  </div>
+                  <div class="form-group"><label>Employee ID</label><input type="text" id="inp-player-empid"
+                      placeholder="e.g. K1250" required></div>
+                  <div class="form-check">
+                    <input type="checkbox" id="inp-player-reg" checked>
+                    <label for="inp-player-reg">Eligible / Registered for Auction</label>
+                  </div>
+                  <button type="submit" class="admin-submit-btn">ADD PLAYER</button>
+                </form>
+              </div>
+
+              <!-- Search & Filters -->
+              <div class="admin-card filter-card" style="margin-bottom: 20px;">
+                <div class="filter-controls-row">
+                  <div class="filter-group search-group">
+                    <label for="registry-search">Search Player</label>
+                    <input type="text" id="registry-search" class="registry-search"
+                      placeholder="🔍 Search name or ID...">
+                  </div>
+                  <div class="filter-group">
+                    <label for="filter-category">Category</label>
+                    <select id="filter-category" class="admin-select">
+                      <option value="all">All Categories</option>
+                      <option value="Pro">Pro</option>
+                      <option value="Intermediate">Intermediate</option>
+                      <option value="Beginner">Beginner</option>
+                    </select>
+                  </div>
+                  <div class="filter-group">
+                    <label for="filter-status">Auction Status</label>
+                    <select id="filter-status" class="admin-select">
+                      <option value="all">All Statuses</option>
+                      <option value="available">Available / Unauctioned</option>
+                      <option value="sold">Sold</option>
+                      <option value="unsold">Unsold</option>
+                    </select>
+                  </div>
+                  <div class="filter-group">
+                    <label for="filter-eligible">Eligibility</label>
+                    <select id="filter-eligible" class="admin-select">
+                      <option value="all">All Players</option>
+                      <option value="eligible">Auction Eligible Only</option>
+                      <option value="ineligible">Ineligible Only</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Registry Table -->
+              <div class="admin-card admin-registry">
+                <div class="registry-scroll">
+                  <table class="data-table">
+                    <thead>
+                      <tr>
+                        <th>EMP ID</th>
+                        <th>NAME</th>
+                        <th>GENDER</th>
+                        <th>CATEGORY</th>
+                        <th>BASE PRICE</th>
+                        <th>AUCTION ELIGIBLE</th>
+                        <th>CAPTAIN ELIGIBLE</th>
+                        <th>TEAM / STATUS</th>
+                      </tr>
+                    </thead>
+                    <tbody id="registry-tbody"></tbody>
+                  </table>
+                </div>
+
+                <!-- Pagination controls -->
+                <div class="registry-pagination">
+                  <button id="reg-prev-btn" class="pagination-btn" disabled>← Previous</button>
+                  <span id="reg-page-info" class="reg-page-info">Page 1 of 1</span>
+                  <button id="reg-next-btn" class="pagination-btn" disabled>Next →</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 2. Team Management Module -->
+            <div id="module-teams" class="admin-module-panel hidden">
+              <h2 class="module-title">👥 Team Management</h2>
+              <div class="team-management-grid">
+                <!-- Add/Edit form -->
+                <div class="admin-card">
+                  <h3 id="team-form-title" class="admin-card-title">➕ Create New Team</h3>
+                  <form id="form-add-team" class="admin-form">
+                    <input type="hidden" id="inp-team-edit-mode" value="">
+                    <div class="form-group"><label>Team Name</label><input type="text" id="inp-team-name"
+                        placeholder="e.g. Rally Kings" required></div>
+                    <div class="form-group"><label>Team Code</label><input type="text" id="inp-team-code"
+                        placeholder="e.g. RK" maxlength="5" style="text-transform:uppercase" required></div>
+                    <div class="form-row">
+                      <div class="form-group"><label>Color</label><input type="color" id="inp-team-color"
+                          value="#00f0ff"></div>
+                      <div class="form-group"><label>Logo / Emoji</label><input type="text" id="inp-team-emoji"
+                          value="👑" maxlength="2" required></div>
+                    </div>
+                    <div class="form-group"><label>Starting Purse (Lakhs)</label><input type="number"
+                        id="inp-team-purse" value="120" step="0.5" required></div>
+                    <div class="form-row" style="margin-top: 10px;">
+                      <button type="submit" id="btn-team-submit" class="admin-submit-btn">ADD TEAM</button>
+                      <button type="button" id="btn-team-cancel" class="admin-cancel-btn hidden">CANCEL EDIT</button>
+                    </div>
+                  </form>
+                </div>
+
+                <!-- Display list -->
+                <div class="admin-card">
+                  <h3 class="admin-card-title">🛡️ Registered Teams</h3>
+                  <div id="teams-list-grid" class="teams-list-grid">
+                    <!-- Generated Dynamically -->
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 3. Captain Assignment Module -->
+            <div id="module-captains" class="admin-module-panel hidden">
+              <h2 class="module-title">👑 Captain Assignment</h2>
+              <div class="admin-card">
+                <h3 class="admin-card-title">Squad Captain Allocator</h3>
+                <p class="card-desc" style="margin-bottom: 20px;">Assign a unique captain to lead each team. A player
+                  assigned as captain is automatically set to "Sold" at ₹20 Lakhs and cannot be bid on during the round
+                  pools.</p>
+                <div id="admin-captain-selectors" class="captain-grid">
+                  <!-- Generated Dynamically -->
+                </div>
+              </div>
+            </div>
+
+            <!-- 4. Round Management Module -->
+            <div id="module-rounds" class="admin-module-panel hidden">
+              <h2 class="module-title">🏆 Round Management</h2>
+
+              <div class="round-management-grid">
+                <!-- Round status panel -->
+                <div class="admin-card">
+                  <h3 class="admin-card-title">📊 Active Round Status</h3>
+                  <div id="round-status-panel" class="round-status-panel">
+                    <!-- Generated Dynamically -->
+                  </div>
+                </div>
+
+                <!-- General Rounds list -->
+                <div class="admin-card">
+                  <h3 class="admin-card-title">🔄 Tournament Rounds Sequencing</h3>
+                  <span id="admin-round" style="display:none"></span>
+                  <div id="rounds-panel"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 5. Import Roster Module -->
+            <div id="module-import" class="admin-module-panel hidden">
+              <h2 class="module-title">📂 Import Player Roster</h2>
+
+              <div class="admin-card">
+                <h3 class="admin-card-title">Excel / CSV File Upload</h3>
+                <p class="card-desc">Upload a roster spreadsheet to populate players. Columns must include Name,
+                  Employee ID (or ID) and Category (Pro, Intermediate, Beginner).</p>
+
+                <!-- Drag and drop zone -->
+                <div class="import-drop-zone" id="import-drop-zone">
+                  <span class="drop-icon">📁</span>
+                  <span class="drop-text">Drag & drop your Excel or CSV file here, or click to choose</span>
+                  <input type="file" id="admin-roster-file" accept=".xlsx,.xls,.csv" style="display:none">
+                  <button type="button" id="btn-trigger-file" class="file-btn">SELECT FILE</button>
+                </div>
+                <div id="admin-file-status" class="file-status">No file chosen</div>
+              </div>
+
+              <!-- Import Preview and Verification Area -->
+              <div id="import-preview-section" class="admin-card hidden" style="margin-top: 24px;">
+                <h3 class="admin-card-title">👁️ Roster Preview & Data Validation</h3>
+
+                <div class="import-stats-row">
+                  <div class="import-stat-card"><span class="lbl">Total Players</span><span id="import-total-players"
+                      class="val">0</span></div>
+                  <div class="import-stat-card"><span class="lbl">Pro Tier</span><span id="import-pro-players"
+                      class="val">0</span></div>
+                  <div class="import-stat-card"><span class="lbl">Intermediate Tier</span><span
+                      id="import-inter-players" class="val">0</span></div>
+                  <div class="import-stat-card"><span class="lbl">Beginner Tier</span><span id="import-begin-players"
+                      class="val">0</span></div>
+                </div>
+
+                <!-- Duplicate / Validation Warning Box -->
+                <div id="import-warnings-box" class="import-warnings-box hidden">
+                  <h4 id="import-warnings-title">⚠️ Warnings and Data Anomalies</h4>
+                  <ul id="import-warnings-list" class="import-warnings-list">
+                    <!-- Warnings injected here -->
+                  </ul>
+                </div>
+
+                <!-- Grid Preview -->
+                <div class="registry-scroll" style="max-height: 350px; margin-top: 16px;">
+                  <table class="data-table">
+                    <thead>
+                      <tr>
+                        <th>EMP ID</th>
+                        <th>NAME</th>
+                        <th>CATEGORY</th>
+                        <th>DEFAULT BASE</th>
+                      </tr>
+                    </thead>
+                    <tbody id="import-preview-tbody"></tbody>
+                  </table>
+                </div>
+
+                <div class="import-actions" style="margin-top: 20px; display: flex; gap: 12px;">
+                  <button id="btn-confirm-import" class="admin-submit-btn">IMPORT ROSTER & GENERATE ROUNDS</button>
+                  <button id="btn-cancel-import" class="admin-cancel-btn">CANCEL</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 6. Auction Configuration Module -->
+            <div id="module-config" class="admin-module-panel hidden">
+              <h2 class="module-title">⚙️ Auction Configuration</h2>
+
+              <div class="admin-card">
+                <h3 class="admin-card-title">Bidding System Controls</h3>
+                <form id="form-auction-config" class="admin-form">
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label>Bidding Timer Duration (Seconds)</label>
+                      <input type="number" id="cfg-timer-duration" min="5" max="120" required>
+                    </div>
+                    <div class="form-group">
+                      <label>Max Budget per Team (₹ Lakhs)</label>
+                      <input type="number" id="cfg-max-budget" step="0.5" required>
+                    </div>
+                  </div>
+
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label>Max Squad Size per Team</label>
+                      <input type="number" id="cfg-max-squad" min="2" max="50" required>
+                    </div>
+                    <div class="form-group">
+                      <label>Unsold Player Handling</label>
+                      <select id="cfg-unsold-handling" class="admin-select">
+                        <option value="return">Return to Pool at End of Round</option>
+                        <option value="permanent">Mark Permanently Unsold</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label>Max Male Players per Team</label>
+                      <input type="number" id="cfg-max-male" min="0" required>
+                    </div>
+                    <div class="form-group">
+                      <label>Max Female Players per Team</label>
+                      <input type="number" id="cfg-max-female" min="0" required>
+                    </div>
+                  </div>
+
+                  <h4
+                    style="margin-top: 15px; margin-bottom: 5px; font-size: 15px; color: var(--accent); font-weight: 700;">
+                    Base Price Rules (₹ Lakhs)</h4>
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label>Pro Tier Base Price</label>
+                      <input type="number" id="cfg-base-pro" step="0.1" required>
+                    </div>
+                    <div class="form-group">
+                      <label>Intermediate Tier Base Price</label>
+                      <input type="number" id="cfg-base-inter" step="0.1" required>
+                    </div>
+                    <div class="form-group">
+                      <label>Beginner Tier Base Price</label>
+                      <input type="number" id="cfg-base-begin" step="0.1" required>
+                    </div>
+                  </div>
+
+                  <div class="form-check" style="margin-top: 10px;">
+                    <input type="checkbox" id="cfg-auto-advance">
+                    <label for="cfg-auto-advance">Auto-Advance to next player after bidding completes</label>
+                  </div>
+
+                  <button type="submit" class="admin-submit-btn" style="margin-top: 20px;">SAVE CONFIGURATION</button>
+                </form>
+              </div>
+            </div>
+
+            <!-- 7. Settings Module -->
+            <div id="module-settings" class="admin-module-panel hidden">
+              <h2 class="module-title">🔧 Console Settings & Preferences</h2>
+
+              <div class="admin-card">
+                <h3 class="admin-card-title">System Preferences</h3>
+                <div class="settings-sections">
+
+                  <div class="settings-group">
+                    <h4>Visual Theme</h4>
+                    <p class="card-desc">Switch layout appearance (Visual mode only).</p>
+                    <div class="theme-selection-row" style="display: flex; gap: 12px; margin-top: 10px;">
+                      <button type="button" id="set-theme-dark" class="theme-select-btn">DARK NEON</button>
+                      <button type="button" id="set-theme-light" class="theme-select-btn">LIGHT NEON</button>
+                    </div>
+                  </div>
+
+                  <hr class="settings-hr">
+
+                  <div class="settings-group">
+                    <h4>Speech and Sound Preferences</h4>
+                    <div class="form-check" style="margin-bottom: 12px;">
+                      <input type="checkbox" id="set-sound-effects" checked>
+                      <label for="set-sound-effects">Enable Tone Sound Effects</label>
+                    </div>
+                    <div class="form-check">
+                      <input type="checkbox" id="set-voice-announcer" checked>
+                      <label for="set-voice-announcer">Enable Audio Speech Voice Announcer</label>
+                    </div>
+                  </div>
+
+                  <hr class="settings-hr">
+
+                  <div class="settings-group">
+                    <h4>Future System Modules</h4>
+                    <div class="coming-soon-features"
+                      style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 12px;">
+                      <div class="feature-placeholder">
+                        <h5>📊 Detailed Bidding Logs</h5>
+                        <p>View, analyze, and export the second-by-second historical bidding sequence for audit
+                          reporting.</p>
+                        <span class="badge-locked">🔒 COMING SOON</span>
+                      </div>
+                      <div class="feature-placeholder">
+                        <h5>🖥️ Secondary Broadcast Screen</h5>
+                        <p>Generate clean display screen output to overlay on a secondary projector for live audience
+                          engagement.</p>
+                        <span class="badge-locked">🔒 COMING SOON</span>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+            </div>
+          </main>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- ═══════════════════════════════════════════════════════════ TOURNAMENT INFO MODAL ═══════════════════════════════════════════════════════════ -->
+    <div id="info-modal" class="modal-overlay hidden">
+      <div class="modal-box">
+        <div class="modal-head">
+          <h3 id="modal-title">Tournament Rules</h3>
+          <button id="btn-close-modal" class="modal-close">✕</button>
+        </div>
+        <div id="modal-body" class="modal-body"></div>
+      </div>
+    </div>
+
+  </div><!-- /#app -->
+</body>
+
+</html>

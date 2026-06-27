@@ -253,35 +253,93 @@
 
       <!-- ── 2. CAPTAIN SETUP ── -->
       <section id="view-captain" class="view hidden">
-        <div class="page-header">
-          <div class="page-subtitle">KASADARA AUCTION PORTAL</div>
-          <h2 class="page-title">Assign Team Captains</h2>
-        </div>
-
-        <div class="card" style="margin-bottom:20px;">
-          <h3 class="card-title">📂 Import Roster from Excel / CSV</h3>
-          <p class="card-desc">Upload your .xlsx / .xls / .csv file. The system will map names, IDs and categories
-            automatically.</p>
-          <div class="file-row">
-            <input type="file" id="roster-file" accept=".xlsx,.xls,.csv" style="display:none">
-            <label for="roster-file" class="file-btn">CHOOSE FILE</label>
-            <span id="file-status" class="file-status">No file chosen</span>
+        <!-- Header with decorative icons -->
+        <div class="captain-header-section">
+          <div class="captain-header-deco">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="deco-icon deco-icon-left">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+            </svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="#ffc107" stroke-width="1.5" class="deco-star">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+            </svg>
+          </div>
+          <div class="captain-header-center">
+            <div class="captain-portal-tag">KASADARA AUCTION PORTAL</div>
+            <h2 class="captain-main-title">Assign Team Captains</h2>
+            <div class="captain-main-sub">Setup your teams before the auction begins</div>
+          </div>
+          <div class="captain-header-deco">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="deco-icon deco-icon-right">
+              <path d="M14.5 10L10 6M18 6l-3.5-3a3 3 0 00-4 0L5 8a3 3 0 000 4l3.5 3a3 3 0 004 0L18 10a3 3 0 000-4z"></path>
+              <path d="M9 21h6"></path><circle cx="12" cy="18" r="1" fill="currentColor"></circle>
+            </svg>
+            <div class="deco-sparkles">✨</div>
           </div>
         </div>
 
-        <div class="card" style="margin-bottom:20px;">
-          <h3 class="card-title">⚙️ Round Category Sequence</h3>
-          <p class="card-desc">Determine which category is auctioned first. Use the arrows to set the sequence (the top
-            category will be Round 1).</p>
-          <div id="round-order-list" class="round-order-list">
-            <!-- Populated dynamically -->
+        <!-- Row 1: Import + Roster Status -->
+        <div class="neon-card neon-import-row">
+          <div class="import-left">
+            <h3 class="neon-card-title"><span class="neon-icon-gold">📁</span> IMPORT ROSTER FROM EXCEL / CSV</h3>
+            <p class="neon-card-desc">Upload your .xlsx / .xls / .csv file. The system will map names, IDs and categories automatically.</p>
+            <div class="file-row" style="margin-top: 15px;">
+              <input type="file" id="roster-file" accept=".xlsx,.xls,.csv" style="display:none">
+              <label for="roster-file" class="neon-file-btn">↑ Choose File</label>
+              <span id="file-status" class="file-status">No file chosen</span>
+            </div>
+          </div>
+          <div class="roster-status-badge">
+            <div class="roster-status-check">✓</div>
+            <div>
+              <div class="roster-status-label">ROSTER STATUS</div>
+              <div class="roster-status-value">Ready to import</div>
+              <div id="roster-count-display" class="roster-status-count">0 Players Found</div>
+            </div>
           </div>
         </div>
 
-        <div class="card">
-          <p class="card-desc">Assign a unique captain for each team before launching the auction.</p>
-          <div id="captain-selectors" class="captain-grid"></div>
-          <button id="btn-launch" class="launch-btn">LAUNCH AUCTION <span>→</span></button>
+        <!-- Row 2: Round Sequence + How It Works -->
+        <div class="neon-split-row">
+          <div class="neon-card neon-card-flex">
+            <h3 class="neon-card-title"><span class="neon-icon-cyan">⚙️</span> ROUND CATEGORY SEQUENCE</h3>
+            <p class="neon-card-desc">Determine which category is auctioned first. Use the arrows to set the sequence (top category will be Round 1).</p>
+            <div id="round-order-list" class="neon-round-list"></div>
+          </div>
+          <div class="neon-card neon-card-hiw">
+            <div class="hiw-content">
+              <h3 class="neon-card-title"><span class="neon-icon-purple">💡</span> HOW IT WORKS</h3>
+              <div class="hiw-steps">
+                <div class="hiw-step"><div class="hiw-num">1</div><div class="hiw-text">Set the order of rounds</div></div>
+                <div class="hiw-step"><div class="hiw-num">2</div><div class="hiw-text">Each round will auction that category first</div></div>
+                <div class="hiw-step"><div class="hiw-num">3</div><div class="hiw-text">Remaining players go to Live Pool</div></div>
+                <div class="hiw-step"><div class="hiw-num">4</div><div class="hiw-text">Assign captains to start the auction</div></div>
+              </div>
+            </div>
+            <div class="hiw-trophy">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="trophy-svg">
+                <path d="M8 21h8"></path><path d="M12 17v4"></path><path d="M7 4h10"></path>
+                <path d="M17 4v8a5 5 0 0 1-10 0V4"></path>
+                <path d="M4 9h3"></path><path d="M17 9h3"></path>
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        <!-- Row 3: Assign Captains -->
+        <div class="neon-card">
+          <h3 class="neon-card-title"><span class="neon-icon-gold">👑</span> ASSIGN CAPTAINS TO TEAMS</h3>
+          <p class="neon-card-desc">Choose a unique captain and vice-captain for each team. A captain can only lead one team.</p>
+          <div id="captain-selectors" class="neon-captain-grid"></div>
+        </div>
+
+        <!-- Footer bar -->
+        <div class="captain-footer-bar">
+          <div class="captain-footer-info">
+            <span class="info-circle">i</span>
+            Once all captains and vice-captains are assigned, you can proceed to the auction.
+          </div>
+          <button id="btn-launch" class="neon-launch-btn">PROCEED TO AUCTION <span>→</span></button>
         </div>
       </section>
 
@@ -308,16 +366,15 @@
 
         <div id="welcome-overview" class="kpi-row hidden" style="margin-top: 10px; margin-bottom: 30px;"></div>
 
-        <!-- Live Activity Panel -->
-        <div id="welcome-activity-panel" class="live-activity-panel hidden">
-          <div class="lap-header">
-            <div class="lap-title"><span class="lap-dot">●</span> LIVE ACTIVITY</div>
-            <button id="btn-welcome-view-all" class="lap-view-all">View All &nbsp;→</button>
-          </div>
-          <div id="welcome-activity-list" class="lap-list">
-            <!-- Live Activity rows will be rendered here dynamically -->
-          </div>
+        <!-- Quote Box -->
+        <div class="welcome-quote-box">
+          <span class="quote-mark quote-left">“</span>
+          <p class="quote-main">Great teams are not just built,<br>they are auctioned with <span class="quote-highlight">vision and strategy.</span></p>
+          <div class="quote-divider"></div>
+          <p class="quote-sub">Play Smart. Bid Smarter. Win Together.</p>
+          <span class="quote-mark quote-right">”</span>
         </div>
+
 
       </section>
 

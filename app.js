@@ -1035,6 +1035,16 @@ function renderRoundOrderSetup() {
 
 function renderCaptainSetup() {
   renderRoundOrderSetup();
+
+  // Update roster count display
+  const rosterCountEl = document.getElementById("roster-count-display");
+  if (rosterCountEl) {
+    const regCount = State.players.filter(p => p && p.isRegistered).length;
+    rosterCountEl.textContent = `${regCount} Players Found`;
+    const statusVal = document.querySelector(".roster-status-value");
+    if (statusVal && regCount > 0) statusVal.textContent = "Ready to import";
+  }
+
   const container = document.getElementById("captain-selectors");
   container.innerHTML = "";
   const sorted = [...State.players]
@@ -1042,47 +1052,150 @@ function renderCaptainSetup() {
     .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
 
   Object.entries(State.teams).forEach(([code, cfg]) => {
+    const teamColor = cfg.color || "#00dcff";
     const selectedCaptain = State.players.find(p => p.teamName === code && p.isCaptain);
-    const opts = sorted
+    const selectedVC = State.players.find(p => p.teamName === code && p.isViceCaptain);
+
+    // Build captain options
+    const captainOpts = sorted
       .filter(p => !p.isSold || p.id === selectedCaptain?.id)
-      .map(p => `<option value="${p.id}" ${p.id === selectedCaptain?.id ? "selected" : ""}>${p.name} (${p.level})</option>`)
+      .map(p => `<option value="${p.id}" ${p.id === selectedCaptain?.id ? "selected" : ""}>${p.name} (${p.empId || p.id})</option>`)
       .join("");
+
+    // Build vice-captain options
+    const vcOpts = sorted
+      .filter(p => !p.isSold || p.id === selectedVC?.id)
+      .map(p => `<option value="${p.id}" ${p.id === selectedVC?.id ? "selected" : ""}>${p.name} (${p.empId || p.id})</option>`)
+      .join("");
+
+    const captainName = selectedCaptain ? selectedCaptain.name : "";
+    const captainId = selectedCaptain ? (selectedCaptain.empId || `EMP${selectedCaptain.id}`) : "";
+    const captainInitial = captainName ? captainName.charAt(0).toUpperCase() : "?";
+
+    const vcName = selectedVC ? selectedVC.name : "";
+    const vcId = selectedVC ? (selectedVC.empId || `EMP${selectedVC.id}`) : "";
+    const vcInitial = vcName ? vcName.charAt(0).toUpperCase() : "?";
+
+    const bothAssigned = selectedCaptain && selectedVC;
+    const statusHTML = bothAssigned
+      ? `<div class="neon-assign-status assigned">✓ Captain & Vice-Captain Assigned</div>`
+      : `<div class="neon-assign-status not-assigned">✗ Not Assigned</div>`;
+
     const card = document.createElement("div");
-    card.className = "captain-card";
-    card.style.borderLeftColor = cfg.color;
+    card.className = "neon-team-card";
+    card.style.setProperty("--team-glow-color", teamColor);
+    card.style.borderColor = `${teamColor}30`;
     card.innerHTML = `
-      <div class="captain-card-head">
-        <span class="captain-emoji">${cfg.emoji}</span>
-        <div class="captain-info">
-          <span class="captain-code" style="color:${cfg.color}">${code}</span>
-          <span class="captain-name-text">${cfg.name}</span>
+      <div class="neon-team-card-header">
+        <span class="neon-team-emoji">${cfg.emoji}</span>
+        <div>
+          <div class="neon-team-code" style="color: ${teamColor};">${code}</div>
+          <div class="neon-team-name">${cfg.name}</div>
         </div>
       </div>
-      <select class="captain-select" data-team="${code}">
-        <option value="">-- Choose Captain --</option>
-        ${opts}
-      </select>`;
+
+      <div class="neon-role-block">
+        <div class="neon-role-label captain-label">CAPTAIN</div>
+        <div class="neon-select-row">
+          <div class="neon-avatar" data-role="captain-avatar">${captainInitial}</div>
+          <div class="neon-select-info">
+            <div class="neon-player-name" data-role="captain-name">${captainName || "—"}</div>
+            <div class="neon-player-id" data-role="captain-id">${captainId}</div>
+          </div>
+          <select class="neon-captain-select" data-team="${code}" data-role="captain">
+            <option value="">-- Choose Captain --</option>
+            ${captainOpts}
+          </select>
+        </div>
+      </div>
+
+      <div class="neon-role-block">
+        <div class="neon-role-label vc-label">VICE-CAPTAIN</div>
+        <div class="neon-select-row">
+          <div class="neon-avatar" data-role="vc-avatar">${vcInitial}</div>
+          <div class="neon-select-info">
+            <div class="neon-player-name" data-role="vc-name">${vcName || "—"}</div>
+            <div class="neon-player-id" data-role="vc-id">${vcId}</div>
+          </div>
+          <select class="neon-captain-select" data-team="${code}" data-role="vice-captain">
+            <option value="">-- Choose Vice-Captain --</option>
+            ${vcOpts}
+          </select>
+        </div>
+      </div>
+
+      ${statusHTML}
+    `;
+
+    // Wire up change listeners for live updates
+    const captainSelect = card.querySelector('[data-role="captain"]');
+    const vcSelect = card.querySelector('[data-role="vice-captain"]');
+
+    captainSelect.addEventListener("change", () => {
+      const player = State.players.find(p => p.id === parseInt(captainSelect.value));
+      card.querySelector('[data-role="captain-avatar"]').textContent = player ? player.name.charAt(0).toUpperCase() : "?";
+      card.querySelector('[data-role="captain-name"]').textContent = player ? player.name : "—";
+      card.querySelector('[data-role="captain-id"]').textContent = player ? (player.empId || `EMP${player.id}`) : "";
+      updateCardStatus(card, captainSelect, vcSelect);
+    });
+
+    vcSelect.addEventListener("change", () => {
+      const player = State.players.find(p => p.id === parseInt(vcSelect.value));
+      card.querySelector('[data-role="vc-avatar"]').textContent = player ? player.name.charAt(0).toUpperCase() : "?";
+      card.querySelector('[data-role="vc-name"]').textContent = player ? player.name : "—";
+      card.querySelector('[data-role="vc-id"]').textContent = player ? (player.empId || `EMP${player.id}`) : "";
+      updateCardStatus(card, captainSelect, vcSelect);
+    });
+
     container.appendChild(card);
   });
 }
+
+function updateCardStatus(card, captainSel, vcSel) {
+  const statusEl = card.querySelector(".neon-assign-status");
+  if (captainSel.value && vcSel.value) {
+    statusEl.className = "neon-assign-status assigned";
+    statusEl.innerHTML = "✓ Captain & Vice-Captain Assigned";
+  } else {
+    statusEl.className = "neon-assign-status not-assigned";
+    statusEl.innerHTML = "✗ Not Assigned";
+  }
+}
 function launchAuction() {
-  const selects = document.querySelectorAll(".captain-select");
-  const ids = new Set();
-  const map = {};
+  const captainSelects = document.querySelectorAll('.neon-captain-select[data-role="captain"]');
+  const vcSelects = document.querySelectorAll('.neon-captain-select[data-role="vice-captain"]');
+  const allIds = new Set();
+  const captainMap = {};
+  const vcMap = {};
   let ok = true;
 
-  selects.forEach(s => {
+  // Validate captains
+  captainSelects.forEach(s => {
     if (!s.value) { ok = false; return; }
-    ids.add(s.value);
-    map[s.dataset.team] = parseInt(s.value);
+    if (allIds.has(s.value)) { ok = false; alert(`Player already assigned to another role! Each player can only fill one role.`); return; }
+    allIds.add(s.value);
+    captainMap[s.dataset.team] = parseInt(s.value);
   });
-  if (!ok) { alert("Please assign a captain for every team!"); return; }
-  if (ids.size < Object.keys(State.teams).length) { alert("Each team must have a unique captain!"); return; }
+
+  // Validate vice-captains
+  vcSelects.forEach(s => {
+    if (!s.value) { ok = false; return; }
+    if (allIds.has(s.value)) { ok = false; alert(`Player already assigned to another role! Each player can only fill one role.`); return; }
+    allIds.add(s.value);
+    vcMap[s.dataset.team] = parseInt(s.value);
+  });
+
+  if (!ok) { alert("Please assign a unique captain AND vice-captain for every team!"); return; }
+  if (allIds.size < Object.keys(State.teams).length * 2) { alert("Each team must have a unique captain and vice-captain!"); return; }
 
   State.players.forEach(p => {
     p.isCaptain = false;
-    for (const [team, cid] of Object.entries(map)) {
-      if (p.id === cid) { p.isCaptain = true; p.isSold = true; p.status = "sold"; p.teamName = team; p.price = AUCTION_LIMITS.captainPrice; }
+    p.isViceCaptain = false;
+    for (const [team, cid] of Object.entries(captainMap)) {
+      if (p.id === cid) { p.isCaptain = true; p.isSold = true; p.status = "sold"; p.teamName = team; p.price = AUCTION_LIMITS.captainPrice || 0; }
+    }
+    for (const [team, vcid] of Object.entries(vcMap)) {
+      if (p.id === vcid) { p.isViceCaptain = true; p.isSold = true; p.status = "sold"; p.teamName = team; p.price = AUCTION_LIMITS.viceCaptainPrice || AUCTION_LIMITS.captainPrice || 0; }
     }
   });
 
@@ -3566,7 +3679,7 @@ class DashboardStatCard {
 
   render() {
     const borderStyle = `--glow-color: ${this.glowColor}; --kpi-border-color: ${this.glowColor}40; --kpi-glow: inset 0 0 12px ${this.glowColor}10, 0 4px 20px rgba(0,0,0,0.3); --kpi-border-hover: ${this.glowColor}80; --kpi-glow-hover: inset 0 0 18px ${this.glowColor}20, 0 12px 30px rgba(0, 0, 0, 0.5);`;
-    const iconStyle = `background: ${this.glowColor}20; border: 1px solid ${this.glowColor}50; color: ${this.glowColor};`;
+    const iconStyle = `color: ${this.glowColor};`;
     const labelStyle = `color: ${this.glowColor};`;
 
     return `
@@ -3625,29 +3738,29 @@ function renderWelcomeOverview() {
   // Card 1: Current Round
   cards.push(new DashboardStatCard({
     title: "CURRENT ROUND",
-    value: currentRoundVal,
+    value: `<span style="color: #00dcff;">${currentRoundVal}</span>`,
     subValue: roundSubVal,
-    icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px;"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`,
+    icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:36px;height:36px;"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`,
     glowColor: "#00dcff",
     tooltip: "The active bidding round category"
   }));
 
   // Card 2: Teams
   cards.push(new DashboardStatCard({
-    title: "TEAMS",
+    title: "TOTAL TEAMS",
     value: totalTeams,
-    subValue: "Total Teams",
-    icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
-    glowColor: "#ba55d3",
+    subValue: "Registered",
+    icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:36px;height:36px;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
+    glowColor: "#9b51e0",
     tooltip: "Total registered teams in this tournament"
   }));
 
   // Card 3: Players Sold
   cards.push(new DashboardStatCard({
-    title: "SOLD",
+    title: "PLAYERS SOLD",
     value: soldPlayersCount,
-    subValue: "Players Sold",
-    icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px;"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>`,
+    subValue: "So Far",
+    icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:36px;height:36px;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>`,
     glowColor: "#00ff87",
     tooltip: "Total players successfully auctioned"
   }));
@@ -3655,11 +3768,11 @@ function renderWelcomeOverview() {
   // Card 4: Players Remaining
   if (config.ShowRemainingPlayers !== false) {
     cards.push(new DashboardStatCard({
-      title: "REMAINING",
+      title: "PLAYERS LEFT",
       value: remainingOverall,
-      subValue: "Players Left",
-      icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px;"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
-      glowColor: "#ff8c00",
+      subValue: "Remaining",
+      icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:36px;height:36px;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>`,
+      glowColor: "#ffc107",
       tooltip: "Registered players left to be auctioned"
     }));
   }
@@ -3667,11 +3780,11 @@ function renderWelcomeOverview() {
   // Card 5: Total Purse
   if (config.ShowTotalPurse !== false) {
     cards.push(new DashboardStatCard({
-      title: "TOTAL PURSE",
+      title: "TOTAL BUDGET",
       value: formatPurse(totalPurse),
-      subValue: "Total Budget",
-      icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px;"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`,
-      glowColor: "#ffd700",
+      subValue: "Total Purse",
+      icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:36px;height:36px;"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"></path><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"></path><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"></path></svg>`,
+      glowColor: "#ec008c",
       tooltip: "Combined starting budget of all teams"
     }));
   }
@@ -3682,8 +3795,8 @@ function renderWelcomeOverview() {
       title: "COMPLETION",
       value: `${completionPercentage}%`,
       subValue: "Auction Progress",
-      icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px;"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>`,
-      glowColor: "#00dcff",
+      icon: `<svg viewBox="0 0 36 36" style="width:36px;height:36px;"><path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-opacity="0.2" stroke-width="3" /><path stroke-dasharray="${completionPercentage}, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-width="3" /></svg>`,
+      glowColor: "#3b82f6",
       tooltip: "Percentage of registered players sold"
     }));
   }

@@ -287,7 +287,8 @@ function getTeamSpent(teamCode) {
 function calculateReserveBudget(teamCode, hypotheticalPlayer = null) {
   const configService = new TournamentConfigService();
   const config = configService.getConfig();
-  const basePrices = config.basePrices || { Pro: 12, Intermediate: 7, Beginner: 3 };
+  const basePrices = (State.config && State.config.basePrices) ? State.config.basePrices : AUCTION_LIMITS.basePrices;
+  if (!basePrices) return { error: true, errorMessage: "Mandatory configuration missing: Base prices must be defined." };
   
   const currentTeamPlayers = State.players.filter(p => p.teamName === teamCode && p.isSold);
   if (hypotheticalPlayer) {
@@ -298,16 +299,20 @@ function calculateReserveBudget(teamCode, hypotheticalPlayer = null) {
   const currentInter = currentTeamPlayers.filter(p => p.level === "Intermediate").length;
   const currentBeg = currentTeamPlayers.filter(p => p.level === "Beginner").length;
   
-  const minPro = config.categories?.Advanced?.min || 0;
-  const minInter = config.categories?.Intermediate?.min || 0;
-  const minBeg = config.categories?.Beginner?.min || 0;
+  const minPro = config.categories?.Advanced?.min;
+  const minInter = config.categories?.Intermediate?.min;
+  const minBeg = config.categories?.Beginner?.min;
+  if (minPro === undefined || minInter === undefined || minBeg === undefined) {
+    return { error: true, errorMessage: "Mandatory configuration missing: Minimum category counts must be defined." };
+  }
   
   const remPro = Math.max(0, minPro - currentPro);
   const remInter = Math.max(0, minInter - currentInter);
   const remBeg = Math.max(0, minBeg - currentBeg);
   
   const requiredCategorySlots = remPro + remInter + remBeg;
-  const minSquadSize = config.minPlayersPerTeam || 0;
+  const minSquadSize = config.minPlayersPerTeam;
+  if (minSquadSize === undefined) return { error: true, errorMessage: "Mandatory configuration missing: minPlayersPerTeam must be defined." };
   const remainingOverall = Math.max(0, minSquadSize - currentTeamPlayers.length);
   
   const flexSlots = Math.max(0, remainingOverall - requiredCategorySlots);
@@ -324,6 +329,75 @@ function calculateReserveBudget(teamCode, hypotheticalPlayer = null) {
     breakdown: { remPro, remInter, remBeg, flexSlots, flexPrice }
   };
 }
+
+const AuctionValidator = {
+  validateAll(teamCode, bidAmount) {
+    const player = State.selectedPlayer;
+    if (!player) return { valid: false, code: "NO_PLAYER", message: "No active player selected." };
+    if (player.isSold) return { valid: false, code: "PLAYER_SOLD", message: "Player is already sold." };
+    if (!teamCode) return { valid: false, code: "NO_TEAM", message: "No team selected for this bid." };
+    if (!State.teams[teamCode]) return { valid: false, code: "INVALID_TEAM", message: "Invalid team selected." };
+    if (bidAmount <= 0) return { valid: false, code: "INVALID_BID", message: "Bid amount must be greater than zero." };
+
+    const teamPlayers = State.players.filter(p => p.teamName === teamCode && p.isSold);
+    const spent = getTeamSpent(teamCode);
+    const maxBudget = getTeamBudget(teamCode);
+    const remainingPurse = maxBudget - spent;
+    
+    if (bidAmount > remainingPurse) {
+      return { valid: false, code: "INSUFFICIENT_FUNDS", message: `${State.teams[teamCode].name || teamCode} only has ₹${remainingPurse.toFixed(2)} Lakhs left - insufficient funds!` };
+    }
+
+    const validationResult = teamValidator.validateTeam(teamCode, teamPlayers, player);
+    if (!validationResult.valid) {
+      return { valid: false, code: "LIMIT_REACHED", message: `${State.teams[teamCode].name || teamCode}: ${validationResult.overallReason}` };
+    }
+
+    const reserveBudgetResult = calculateReserveBudget(teamCode, player);
+    if (reserveBudgetResult.error) {
+      return { valid: false, code: "CONFIG_ERROR", message: reserveBudgetResult.errorMessage };
+    }
+    const { reserveBudget } = reserveBudgetResult;
+    const remainingPurseAfterBid = remainingPurse - bidAmount;
+    
+    if (remainingPurseAfterBid < reserveBudget) {
+      return { 
+        valid: false, 
+        code: "INSUFFICIENT_REMAINING_BUDGET", 
+        message: `Cannot assign this player.\nRemaining purse after this bid is ₹${remainingPurseAfterBid.toFixed(2)}L, but ₹${reserveBudget.toFixed(2)}L is required to purchase all remaining mandatory players at base price.`
+      };
+    }
+    
+    return { valid: true, code: "SUCCESS", message: "Valid" };
+  },
+  
+  validateAuctionCompletion() {
+    const configService = new TournamentConfigService();
+    const config = configService.getConfig();
+    
+    for (const teamCode of Object.keys(State.teams)) {
+      const players = State.players.filter(p => p.teamName === teamCode && p.isSold);
+      const teamName = State.teams[teamCode].name || teamCode;
+      
+      if (players.length < config.minPlayersPerTeam) return { valid: false, message: `${teamName}: Minimum squad size of ${config.minPlayersPerTeam} not met.` };
+      
+      const males = players.filter(p => (p.gender || "Male").toLowerCase() === "male").length;
+      const females = players.filter(p => (p.gender || "").toLowerCase() === "female").length;
+      if (males < config.male.min) return { valid: false, message: `${teamName}: Minimum male count of ${config.male.min} not met.` };
+      if (females < config.female.min) return { valid: false, message: `${teamName}: Minimum female count of ${config.female.min} not met.` };
+      
+      const pro = players.filter(p => p.level === "Pro").length;
+      const inter = players.filter(p => p.level === "Intermediate").length;
+      const beg = players.filter(p => p.level === "Beginner").length;
+      if (pro < config.categories.Advanced.min) return { valid: false, message: `${teamName}: Minimum Pro players count of ${config.categories.Advanced.min} not met.` };
+      if (inter < config.categories.Intermediate.min) return { valid: false, message: `${teamName}: Minimum Intermediate players count of ${config.categories.Intermediate.min} not met.` };
+      if (beg < config.categories.Beginner.min) return { valid: false, message: `${teamName}: Minimum Beginner players count of ${config.categories.Beginner.min} not met.` };
+    }
+    
+    return { valid: true };
+  }
+};
+
 // ── SOUND ──────────────────────────────────────────────
 const Sound = {
   ctx: null,
@@ -1634,30 +1708,12 @@ function placeBid(team) {
     return; // Prevent consecutive bids from the same team
   }
 
-  const teamPlayers = State.players.filter(p => p.teamName === team && p.isSold);
-  const validationResult = teamValidator.validateTeam(team, teamPlayers, player);
-  if (!validationResult.valid) {
-    alert(`${State.teams[team].name || team}: ${validationResult.overallReason}`);
-    return;
-  }
-
   const isFirstBid = !State.selectedTeam;
   const nextPrice = isFirstBid ? player.price : (player.price + (player.price >= 20 ? 1.0 : 0.5));
 
-  const spent = getTeamSpent(team);
-  const maxBudget = getTeamBudget(team);
-  const currentRemainingPurse = maxBudget - spent;
-  
-  if (currentRemainingPurse < nextPrice) {
-    alert(`${team} only has \u20B9${currentRemainingPurse.toFixed(2)} Lakhs left - insufficient funds!`);
-    return;
-  }
-  
-  const { reserveBudget, remainingOverall } = calculateReserveBudget(team, player);
-  const maximumAllowedBid = currentRemainingPurse - reserveBudget;
-  
-  if (nextPrice > maximumAllowedBid) {
-    alert(`You cannot bid more than \u20B9${maximumAllowedBid.toFixed(2)} Lakhs.\n\u20B9${reserveBudget.toFixed(2)} Lakhs is required to purchase the remaining mandatory players at their base prices.`);
+  const validationResult = AuctionValidator.validateAll(team, nextPrice);
+  if (!validationResult.valid) {
+    alert(validationResult.message);
     return;
   }
 
@@ -1685,20 +1741,9 @@ function adjustBidAmount(step) {
   if (nextPrice < basePrice) return;
 
   if (State.selectedTeam) {
-    const spent = getTeamSpent(State.selectedTeam);
-    const maxBudget = getTeamBudget(State.selectedTeam);
-    const currentRemainingPurse = maxBudget - spent;
-
-    if (currentRemainingPurse < nextPrice) {
-      alert(`${State.selectedTeam} only has \u20B9${currentRemainingPurse.toFixed(2)} Lakhs left - insufficient funds!`);
-      return;
-    }
-    
-    const { reserveBudget, remainingOverall } = calculateReserveBudget(State.selectedTeam, player);
-    const maximumAllowedBid = currentRemainingPurse - reserveBudget;
-    
-    if (nextPrice > maximumAllowedBid) {
-      alert(`You cannot bid more than \u20B9${maximumAllowedBid.toFixed(2)} Lakhs.\n\u20B9${reserveBudget.toFixed(2)} Lakhs is required to purchase the remaining mandatory players at their base prices.`);
+    const validationResult = AuctionValidator.validateAll(State.selectedTeam, nextPrice);
+    if (!validationResult.valid) {
+      alert(validationResult.message);
       return;
     }
   }
@@ -1791,17 +1836,11 @@ function doSell() {
   const team = State.selectedTeam;
   if (!player || !team || player.isSold) return;
 
-  const teamPlayers = State.players.filter(p => p.teamName === team && p.isSold);
-  const validationResult = teamValidator.validateTeam(team, teamPlayers, player);
+  const validationResult = AuctionValidator.validateAll(team, player.price);
   if (!validationResult.valid) {
-    alert(`${State.teams[team].name || team}: ${validationResult.overallReason}`);
+    alert(validationResult.message);
     return;
   }
-
-    const spent = getTeamSpent(team);
-    const maxBudget = getTeamBudget(team);
-    const remaining = maxBudget - spent;
-    if (remaining < player.price) { alert(team + " doesn't have enough funds!"); return; }
 
     stopTimer();
     player.isSold = true; player.status = "sold"; player.teamName = team;

@@ -61,7 +61,7 @@ const AUCTION_LIMITS = {
   teamBudget: 120.0,
   captainPrice: 20.0,
   categoryMaxBid: { Pro: 8.0, Intermediate: 5.0, Beginner: 3.0 },
-  basePrices: { Pro: 8.0, Intermediate: 5.0, Beginner: 3.0 }
+  basePrices: { Pro: 12.0, Intermediate: 7.0, Beginner: 3.0 }
 };
 
 // ── HELPERS ────────────────────────────────────────────
@@ -283,6 +283,47 @@ function getTeamBudget(teamCode) {
 function getTeamSpent(teamCode) {
   return State.players.filter(p => p.teamName === teamCode && p.isSold).reduce((sum, p) => sum + p.price, 0);
 }
+
+function calculateReserveBudget(teamCode, hypotheticalPlayer = null) {
+  const configService = new TournamentConfigService();
+  const config = configService.getConfig();
+  const basePrices = config.basePrices || { Pro: 12, Intermediate: 7, Beginner: 3 };
+  
+  const currentTeamPlayers = State.players.filter(p => p.teamName === teamCode && p.isSold);
+  if (hypotheticalPlayer) {
+    currentTeamPlayers.push(hypotheticalPlayer);
+  }
+  
+  const currentPro = currentTeamPlayers.filter(p => p.level === "Pro").length;
+  const currentInter = currentTeamPlayers.filter(p => p.level === "Intermediate").length;
+  const currentBeg = currentTeamPlayers.filter(p => p.level === "Beginner").length;
+  
+  const minPro = config.categories?.Advanced?.min || 0;
+  const minInter = config.categories?.Intermediate?.min || 0;
+  const minBeg = config.categories?.Beginner?.min || 0;
+  
+  const remPro = Math.max(0, minPro - currentPro);
+  const remInter = Math.max(0, minInter - currentInter);
+  const remBeg = Math.max(0, minBeg - currentBeg);
+  
+  const requiredCategorySlots = remPro + remInter + remBeg;
+  const minSquadSize = config.minPlayersPerTeam || 0;
+  const remainingOverall = Math.max(0, minSquadSize - currentTeamPlayers.length);
+  
+  const flexSlots = Math.max(0, remainingOverall - requiredCategorySlots);
+  const flexPrice = Math.min(basePrices.Pro, basePrices.Intermediate, basePrices.Beginner); // Usually Beginner is cheapest
+  
+  const reserveBudget = (remPro * basePrices.Pro) + 
+                        (remInter * basePrices.Intermediate) + 
+                        (remBeg * basePrices.Beginner) + 
+                        (flexSlots * flexPrice);
+                        
+  return {
+    reserveBudget,
+    remainingOverall,
+    breakdown: { remPro, remInter, remBeg, flexSlots, flexPrice }
+  };
+}
 // ── SOUND ──────────────────────────────────────────────
 const Sound = {
   ctx: null,
@@ -427,7 +468,7 @@ function handleCaptainRosterUpload(e) {
             if (isCaptain) {
               isSold = true;
               status = "sold";
-              finalPrice = AUCTION_LIMITS.captainPrice;
+              finalPrice = price;
             }
           }
         }
@@ -1192,10 +1233,10 @@ function launchAuction() {
     p.isCaptain = false;
     p.isViceCaptain = false;
     for (const [team, cid] of Object.entries(captainMap)) {
-      if (p.id === cid) { p.isCaptain = true; p.isSold = true; p.status = "sold"; p.teamName = team; p.price = AUCTION_LIMITS.captainPrice || 0; }
+      if (p.id === cid) { p.isCaptain = true; p.isSold = true; p.status = "sold"; p.teamName = team; p.price = p.basePrice || 0; }
     }
     for (const [team, vcid] of Object.entries(vcMap)) {
-      if (p.id === vcid) { p.isViceCaptain = true; p.isSold = true; p.status = "sold"; p.teamName = team; p.price = AUCTION_LIMITS.viceCaptainPrice || AUCTION_LIMITS.captainPrice || 0; }
+      if (p.id === vcid) { p.isViceCaptain = true; p.isSold = true; p.status = "sold"; p.teamName = team; p.price = p.basePrice || 0; }
     }
   });
 
@@ -1589,46 +1630,34 @@ function placeBid(team) {
   const player = State.selectedPlayer;
   if (!player || player.isSold || player.status === "unsold") return;
 
-  // Max Squad size check
-  const maxSquadSize = State.config.maxSquadSize || 10;
-  const draftedCount = State.players.filter(p => p.teamName === team && p.isSold).length;
-  if (draftedCount >= maxSquadSize) {
-    alert(team + " has already reached the maximum squad size of " + maxSquadSize + " players!");
-    return;
+  if (State.selectedTeam === team) {
+    return; // Prevent consecutive bids from the same team
   }
 
-  // Gender check
-  const playerGender = (player.gender || "Male").toLowerCase();
   const teamPlayers = State.players.filter(p => p.teamName === team && p.isSold);
-  if (playerGender.startsWith("m")) {
-    const maxMale = State.config.maxMalePerTeam;
-    if (maxMale !== undefined && maxMale !== null && maxMale > 0) {
-      const maleCount = teamPlayers.filter(p => (p.gender || "Male").toLowerCase().startsWith("m")).length;
-      if (maleCount >= maxMale) {
-        alert(`${State.teams[team].name} has already reached the maximum limit of ${maxMale} Male players!`);
-        return;
-      }
-    }
-  } else if (playerGender.startsWith("f")) {
-    const maxFemale = State.config.maxFemalePerTeam;
-    if (maxFemale !== undefined && maxFemale !== null && maxFemale > 0) {
-      const femaleCount = teamPlayers.filter(p => (p.gender || "Male").toLowerCase().startsWith("f")).length;
-      if (femaleCount >= maxFemale) {
-        alert(`${State.teams[team].name} has already reached the maximum limit of ${maxFemale} Female players!`);
-        return;
-      }
-    }
+  const validationResult = teamValidator.validateTeam(team, teamPlayers, player);
+  if (!validationResult.valid) {
+    alert(`${State.teams[team].name || team}: ${validationResult.overallReason}`);
+    return;
   }
 
   const isFirstBid = !State.selectedTeam;
   const nextPrice = isFirstBid ? player.price : (player.price + (player.price >= 20 ? 1.0 : 0.5));
 
-  // Budget check
   const spent = getTeamSpent(team);
   const maxBudget = getTeamBudget(team);
-  const remaining = maxBudget - spent;
-  if (remaining < nextPrice) {
-    alert(team + " only has \u20B9" + remaining.toFixed(2) + "L left - insufficient funds!");
+  const currentRemainingPurse = maxBudget - spent;
+  
+  if (currentRemainingPurse < nextPrice) {
+    alert(`${team} only has \u20B9${currentRemainingPurse.toFixed(2)} Lakhs left - insufficient funds!`);
+    return;
+  }
+  
+  const { reserveBudget, remainingOverall } = calculateReserveBudget(team, player);
+  const maximumAllowedBid = currentRemainingPurse - reserveBudget;
+  
+  if (nextPrice > maximumAllowedBid) {
+    alert(`You cannot bid more than \u20B9${maximumAllowedBid.toFixed(2)} Lakhs.\n\u20B9${reserveBudget.toFixed(2)} Lakhs is required to purchase the remaining mandatory players at their base prices.`);
     return;
   }
 
@@ -1658,9 +1687,18 @@ function adjustBidAmount(step) {
   if (State.selectedTeam) {
     const spent = getTeamSpent(State.selectedTeam);
     const maxBudget = getTeamBudget(State.selectedTeam);
-    const remaining = maxBudget - spent;
-    if (remaining < nextPrice) {
-      alert(State.selectedTeam + " only has \u20B9" + remaining.toFixed(2) + "L left - insufficient funds!");
+    const currentRemainingPurse = maxBudget - spent;
+
+    if (currentRemainingPurse < nextPrice) {
+      alert(`${State.selectedTeam} only has \u20B9${currentRemainingPurse.toFixed(2)} Lakhs left - insufficient funds!`);
+      return;
+    }
+    
+    const { reserveBudget, remainingOverall } = calculateReserveBudget(State.selectedTeam, player);
+    const maximumAllowedBid = currentRemainingPurse - reserveBudget;
+    
+    if (nextPrice > maximumAllowedBid) {
+      alert(`You cannot bid more than \u20B9${maximumAllowedBid.toFixed(2)} Lakhs.\n\u20B9${reserveBudget.toFixed(2)} Lakhs is required to purchase the remaining mandatory players at their base prices.`);
       return;
     }
   }
@@ -1753,35 +1791,12 @@ function doSell() {
   const team = State.selectedTeam;
   if (!player || !team || player.isSold) return;
 
-  // Max Squad size check
-  const maxSquadSize = State.config.maxSquadSize || 10;
-  const draftedCount = State.players.filter(p => p.teamName === team && p.isSold).length;
-  if (draftedCount >= maxSquadSize) {
-    alert(team + " has already reached the maximum squad size of " + maxSquadSize + " players!");
+  const teamPlayers = State.players.filter(p => p.teamName === team && p.isSold);
+  const validationResult = teamValidator.validateTeam(team, teamPlayers, player);
+  if (!validationResult.valid) {
+    alert(`${State.teams[team].name || team}: ${validationResult.overallReason}`);
     return;
   }
-
-  // Gender check
-  const playerGender = (player.gender || "Male").toLowerCase();
-  const teamPlayers = State.players.filter(p => p.teamName === team && p.isSold);
-  if (playerGender.startsWith("m")) {
-    const maxMale = State.config.maxMalePerTeam;
-    if (maxMale !== undefined && maxMale !== null && maxMale > 0) {
-      const maleCount = teamPlayers.filter(p => (p.gender || "Male").toLowerCase().startsWith("m")).length;
-      if (maleCount >= maxMale) {
-        alert(`${State.teams[team].name} has already reached the maximum limit of ${maxMale} Male players!`);
-        return;
-      }
-    }
-  } else if (playerGender.startsWith("f")) {
-    const maxFemale = State.config.maxFemalePerTeam;
-    if (maxFemale !== undefined && maxFemale !== null && maxFemale > 0) {
-      const femaleCount = teamPlayers.filter(p => (p.gender || "Male").toLowerCase().startsWith("f")).length;
-      if (femaleCount >= maxFemale) {
-        alert(`${State.teams[team].name} has already reached the maximum limit of ${maxFemale} Female players!`);
-        return;
-      }
-    }
 
     const spent = getTeamSpent(team);
     const maxBudget = getTeamBudget(team);
@@ -1823,7 +1838,6 @@ function doSell() {
       renderPool();
       switchView("pool");
     }, 800);
-  }
 }
 
 function doUnsold() {
@@ -1915,7 +1929,7 @@ function renderDashboard() {
           </div>
         </div>
       </td>
-      <td style="text-align:center; font-weight:700;">${t.players.length} / ${State.config.maxSquadSize || 10}</td>
+      <td style="text-align:center; font-weight:700;">${t.players.length} / ${teamValidator.validateTeam(t.code, t.players).maxAllowed}</td>
       <td class="color-gold" style="font-weight:700;">
         <div style="display:flex; flex-direction:column; gap:4px;">
           <span>${formatPurse(t.spent)}</span>
@@ -2093,46 +2107,236 @@ function getTeamTreeIcon(code) {
   return icons[code] || '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4 7v6c0 4.4 3.4 7.4 8 9 4.6-1.6 8-4.6 8-9V7l-8-4Z"/></svg>';
 }
 
-function getValidationLimit(primary, legacy, fallback = null) {
-  const value = State.config?.[primary];
-  if (value !== undefined && value !== null && value !== "") return Number(value);
-  const legacyValue = legacy ? State.config?.[legacy] : null;
-  if (legacyValue !== undefined && legacyValue !== null && legacyValue !== "") return Number(legacyValue);
-  return fallback;
+class TournamentConfigService {
+  constructor() {
+    this.config = {
+      totalTeams: 0,
+      totalPlayers: 0,
+      minPlayersPerTeam: 0,
+      maxPlayersPerTeam: 0,
+      male: { min: 0, max: 0 },
+      female: { min: 0, max: 0 },
+      categories: {
+        Advanced: { min: 0, max: 0 },
+        Intermediate: { min: 0, max: 0 },
+        Beginner: { min: 0, max: 0 }
+      }
+    };
+  }
+
+  loadConfig() {
+    const activePlayers = State.players.length; 
+    const activeTeams = Object.keys(State.teams).length || 1;
+
+    this.config.totalPlayers = activePlayers;
+    this.config.totalTeams = activeTeams;
+    
+    this.config.minPlayersPerTeam = Math.floor(activePlayers / activeTeams);
+    this.config.maxPlayersPerTeam = Math.ceil(activePlayers / activeTeams);
+
+    const totalMale = State.players.filter(p => (p.gender || "Male").toLowerCase().startsWith("m")).length;
+    const totalFemale = State.players.filter(p => (p.gender || "Male").toLowerCase().startsWith("f")).length;
+
+    this.config.male.min = Math.floor(totalMale / activeTeams);
+    this.config.male.max = Math.ceil(totalMale / activeTeams);
+    
+    this.config.female.min = Math.floor(totalFemale / activeTeams);
+    this.config.female.max = Math.ceil(totalFemale / activeTeams);
+
+    const totalPro = State.players.filter(p => p.level === "Pro").length;
+    const totalInter = State.players.filter(p => p.level === "Intermediate").length;
+    const totalBeginner = State.players.filter(p => p.level === "Beginner").length;
+
+    this.config.categories.Advanced.min = Math.floor(totalPro / activeTeams);
+    this.config.categories.Advanced.max = Math.ceil(totalPro / activeTeams);
+    this.config.categories.Intermediate.min = Math.floor(totalInter / activeTeams);
+    this.config.categories.Intermediate.max = Math.ceil(totalInter / activeTeams);
+    this.config.categories.Beginner.min = Math.floor(totalBeginner / activeTeams);
+    this.config.categories.Beginner.max = Math.ceil(totalBeginner / activeTeams);
+  }
+
+  getConfig() {
+    this.loadConfig();
+    return this.config;
+  }
 }
 
-function validateRange(count, minKey, maxKey, legacyMaxKey) {
-  const min = getValidationLimit(minKey, null, 0);
-  const max = getValidationLimit(maxKey, legacyMaxKey, null);
-  const overMin = min === null || Number.isNaN(min) || count >= min;
-  const underMax = max === null || Number.isNaN(max) || count <= max;
-  return { valid: overMin && underMax, min, max };
+class TournamentValidator {
+  constructor(configService) {
+    this.configService = configService;
+  }
+
+  calculateDistribution() {
+    const config = this.configService.getConfig();
+    const totalPlayers = config.totalPlayers;
+    const totalTeams = config.totalTeams;
+    
+    if (totalTeams === 0) return { maxLargeTeams: 0, baseSize: 0, largeSize: 0, totalTeams: 0 };
+
+    const baseSize = Math.floor(totalPlayers / totalTeams);
+    const remainder = totalPlayers % totalTeams;
+    
+    const largeSize = baseSize + 1;
+    const maxLargeTeams = remainder;
+
+    return {
+      baseSize,
+      largeSize,
+      maxLargeTeams,
+      totalTeams
+    };
+  }
+  
+  getGlobalValidationState() {
+    const distribution = this.calculateDistribution();
+    
+    let largeTeamsCount = 0;
+    const teamSizes = {};
+    
+    for (const teamCode of Object.keys(State.teams)) {
+      const players = getTeamTreePlayers(teamCode);
+      teamSizes[teamCode] = players.length;
+      if (players.length >= distribution.largeSize && distribution.largeSize > distribution.baseSize) {
+        largeTeamsCount++;
+      }
+    }
+
+    return {
+      distribution,
+      largeTeamsCount,
+      teamSizes
+    };
+  }
 }
 
-function getTeamValidation(players) {
-  const maleCount = players.filter(p => (p.gender || "").toLowerCase() === "male").length;
-  const femaleCount = players.filter(p => (p.gender || "").toLowerCase() === "female").length;
-  const proCount = players.filter(p => normalizeLevel(p.level) === "Pro").length;
-  const intermediateCount = players.filter(p => normalizeLevel(p.level) === "Intermediate").length;
-  const beginnerCount = players.filter(p => normalizeLevel(p.level) === "Beginner").length;
+class ValidationResult {
+  constructor(valid, reason = "", dynamicLimit = null) {
+    this.valid = valid;
+    this.reason = reason;
+    this.dynamicLimit = dynamicLimit;
+  }
+}
 
-  const teamSize = validateRange(players.length, "MinPlayersPerTeam", "MaxPlayersPerTeam", "maxSquadSize");
-  const male = validateRange(maleCount, "MinMalePlayers", "MaxMalePlayers", "maxMalePerTeam");
-  const female = validateRange(femaleCount, "MinFemalePlayers", "MaxFemalePlayers", "maxFemalePerTeam");
-  const pro = validateRange(proCount, "MinProPlayers", "MaxProPlayers", null);
-  const intermediate = validateRange(intermediateCount, "MinIntermediatePlayers", "MaxIntermediatePlayers", null);
-  const beginner = validateRange(beginnerCount, "MinBeginnerPlayers", "MaxBeginnerPlayers", null);
+class ValidationMessageService {
+  static getMessage(result) {
+    if (result.valid) return "Valid";
+    return result.reason;
+  }
+}
 
-  const effectiveMax = teamSize.max || State.config.maxSquadSize || State.config.MaxPlayersPerTeam || 10;
-  const teamComplete = teamSize.valid && players.length >= effectiveMax;
-  const configuredGenderTotal = Number(male.max || 0) + Number(female.max || 0);
-  const genderExact = configuredGenderTotal === players.length ? maleCount === male.max && femaleCount === female.max : true;
+class TeamValidator {
+  constructor(tournamentValidator, configService) {
+    this.tournamentValidator = tournamentValidator;
+    this.configService = configService;
+  }
+
+  validateTeam(teamCode, currentPlayers, potentialNewPlayer = null) {
+    const config = this.configService.getConfig();
+    const globalState = this.tournamentValidator.getGlobalValidationState();
+    const dist = globalState.distribution;
+    
+    const players = [...currentPlayers];
+    if (potentialNewPlayer) {
+      players.push(potentialNewPlayer);
+    }
+    
+    const size = players.length;
+    
+    let maxAllowedForThisTeam = dist.baseSize;
+    const isCurrentlyLarge = currentPlayers.length >= dist.largeSize;
+    if (dist.largeSize > dist.baseSize) {
+       if (isCurrentlyLarge || globalState.largeTeamsCount < dist.maxLargeTeams) {
+         maxAllowedForThisTeam = dist.largeSize;
+       }
+    }
+
+    if (config.maxPlayersPerTeam && maxAllowedForThisTeam > config.maxPlayersPerTeam) {
+      maxAllowedForThisTeam = config.maxPlayersPerTeam;
+    }
+
+    let teamSizeValid = true;
+    let teamSizeReason = "";
+    if (size > maxAllowedForThisTeam) {
+      teamSizeValid = false;
+      if (maxAllowedForThisTeam === dist.baseSize && dist.largeSize > dist.baseSize) {
+        teamSizeReason = `Only ${dist.maxLargeTeams} teams can have ${dist.largeSize} players. This team can only have ${maxAllowedForThisTeam} players.`;
+      } else {
+        teamSizeReason = `Team has reached its maximum allowed players (${maxAllowedForThisTeam}).`;
+      }
+    }
+
+    const maleCount = players.filter(p => (p.gender || "").toLowerCase() === "male").length;
+    const femaleCount = players.filter(p => (p.gender || "").toLowerCase() === "female").length;
+    
+    let maleValid = true, maleReason = "";
+    if (config.male.max !== null && maleCount > config.male.max) {
+       maleValid = false;
+       maleReason = `Maximum Male players reached (${config.male.max}).`;
+    }
+    
+    let femaleValid = true, femaleReason = "";
+    if (config.female.max !== null && femaleCount > config.female.max) {
+       femaleValid = false;
+       femaleReason = `Maximum Female players reached (${config.female.max}).`;
+    }
+
+    const advCount = players.filter(p => normalizeLevel(p.level) === "Pro" || normalizeLevel(p.level) === "Advanced").length;
+    const intCount = players.filter(p => normalizeLevel(p.level) === "Intermediate").length;
+    const begCount = players.filter(p => normalizeLevel(p.level) === "Beginner").length;
+
+    let advValid = true, advReason = "";
+    if (config.categories.Advanced.max !== null && advCount > config.categories.Advanced.max) {
+       advValid = false;
+       advReason = `Advanced quota completed (${config.categories.Advanced.max}).`;
+    }
+
+    let intValid = true, intReason = "";
+    if (config.categories.Intermediate.max !== null && intCount > config.categories.Intermediate.max) {
+       intValid = false;
+       intReason = `Intermediate quota completed (${config.categories.Intermediate.max}).`;
+    }
+    
+    let begValid = true, begReason = "";
+    if (config.categories.Beginner.max !== null && begCount > config.categories.Beginner.max) {
+       begValid = false;
+       begReason = `Beginner quota completed (${config.categories.Beginner.max}).`;
+    }
+
+    return {
+      valid: teamSizeValid && maleValid && femaleValid && advValid && intValid && begValid,
+      overallReason: !teamSizeValid ? teamSizeReason : (!maleValid ? maleReason : (!femaleValid ? femaleReason : (!advValid ? advReason : (!intValid ? intReason : (!begValid ? begReason : ""))))),
+      teamSize: new ValidationResult(teamSizeValid, teamSizeReason, maxAllowedForThisTeam),
+      male: new ValidationResult(maleValid, maleReason, config.male.max),
+      female: new ValidationResult(femaleValid, femaleReason, config.female.max),
+      advanced: new ValidationResult(advValid, advReason, config.categories.Advanced.max),
+      intermediate: new ValidationResult(intValid, intReason, config.categories.Intermediate.max),
+      beginner: new ValidationResult(begValid, begReason, config.categories.Beginner.max),
+      counts: { maleCount, femaleCount, proCount: advCount, intermediateCount: intCount, beginnerCount: begCount, totalCount: size },
+      maxAllowed: maxAllowedForThisTeam
+    };
+  }
+}
+
+const tournamentConfigService = new TournamentConfigService();
+const tournamentValidator = new TournamentValidator(tournamentConfigService);
+const teamValidator = new TeamValidator(tournamentValidator, tournamentConfigService);
+
+function getTeamValidation(players, teamCode) {
+  if (!teamCode && players.length > 0) {
+    teamCode = players[0].teamName;
+  }
+  const result = teamValidator.validateTeam(teamCode || "UNKNOWN", players);
+  const effectiveMax = result.maxAllowed;
+  const teamComplete = result.teamSize.valid && players.length >= effectiveMax;
+  
+  const configuredGenderTotal = Number(result.male.dynamicLimit || 0) + Number(result.female.dynamicLimit || 0);
+  const genderExact = configuredGenderTotal === players.length ? result.counts.maleCount === result.male.dynamicLimit && result.counts.femaleCount === result.female.dynamicLimit : true;
 
   return {
-    teamSize: { ...teamSize, valid: teamComplete },
-    genderBalance: teamComplete && male.valid && female.valid && genderExact,
-    levelBalance: teamComplete && pro.valid && intermediate.valid && beginner.valid,
-    counts: { maleCount, femaleCount, proCount, intermediateCount, beginnerCount }
+    teamSize: { valid: teamComplete, min: 0, max: effectiveMax },
+    genderBalance: teamComplete && result.male.valid && result.female.valid && genderExact,
+    levelBalance: teamComplete && result.advanced.valid && result.intermediate.valid && result.beginner.valid,
+    counts: result.counts
   };
 }
 
@@ -2145,7 +2349,7 @@ function normalizeLevel(level) {
 
 function renderTeamCards(preferredCode = activeTeamTreeCode) {
   const grid = document.getElementById("team-cards-grid");
-  const maxSquadSize = State.config.maxSquadSize || 10;
+
   const treeView = document.getElementById("team-tree-view");
   grid.innerHTML = "";
   treeView.classList.remove("hidden");
@@ -2173,7 +2377,7 @@ function renderTeamCards(preferredCode = activeTeamTreeCode) {
       <span class="team-selector-meta">
         <span class="team-selector-code">${teamTreeEscape(code)}</span>
         <strong>${teamTreeEscape(cfg.name || "Team")}</strong>
-        <em>${players.length} / ${maxSquadSize} Players</em>
+        <em style="margin-top:2px; font-size:11px; opacity:0.8;">${players.length} / ${teamValidator.validateTeam(code, players).maxAllowed} Players</em>
       </span>`;
     card.addEventListener("click", () => loadTeamTree(code));
     grid.appendChild(card);
@@ -2293,7 +2497,8 @@ function getLevelTargetCount(level) {
 
 function renderTeamInsights(cfg, captain, players, validation) {
   const counts = validation.counts;
-  const maxSquadSize = State.config.maxSquadSize || 10;
+  const result = teamValidator.validateTeam(null, players);
+  const maxSquadSize = result.maxAllowed;
   const total = players.length || 0;
   const proPct = total ? Math.round((counts.proCount / total) * 100) : 0;
   const intermediatePct = total ? Math.round((counts.intermediateCount / total) * 100) : 0;
@@ -2605,7 +2810,7 @@ function renderTeamsList() {
     const spent = players.reduce((sum, p) => sum + p.price, 0);
     const maxBudget = cfg.purse !== undefined ? cfg.purse : (State.config.maxBudget || AUCTION_LIMITS.teamBudget);
     const remaining = Math.max(0, maxBudget - spent);
-    const maxSquadSize = State.config.maxSquadSize || 10;
+
 
     const card = document.createElement("div");
     card.className = "team-admin-card";
@@ -2615,7 +2820,7 @@ function renderTeamsList() {
         <div class="team-admin-logo" style="box-shadow: 0 0 10px rgba(${hexToRgb(cfg.color)}, 0.2)">${cfg.emoji}</div>
         <div class="team-admin-details">
           <span class="team-admin-name">${cfg.name} (<span style="color:${cfg.color}">${code}</span>)</span>
-          <span class="team-admin-meta">Purse: ${formatPurse(spent)} / ${formatPurse(maxBudget)} (${formatPurse(remaining)} left) &bull; Squad: ${players.length}/${maxSquadSize}</span>
+          <span class="team-admin-meta">Purse: ${formatPurse(spent)} / ${formatPurse(maxBudget)} (${formatPurse(remaining)} left) &bull; Squad: ${players.length}/${teamValidator.validateTeam(code, players).maxAllowed}</span>
         </div>
       </div>
       <div class="team-admin-actions">
@@ -2801,7 +3006,7 @@ function renderAdminCaptains() {
           newCaptain.isSold = true;
           newCaptain.status = "sold";
           newCaptain.teamName = code;
-          newCaptain.price = AUCTION_LIMITS.captainPrice;
+          newCaptain.price = newCaptain.basePrice || 0;
         }
 
         assignLotteryNumbersAndSort();
@@ -2843,7 +3048,7 @@ function renderAdminCaptains() {
           player.isSold = true;
           player.status = "sold";
           player.teamName = code;
-          player.price = AUCTION_LIMITS.captainPrice;
+          player.price = player.basePrice || 0;
 
           assignLotteryNumbersAndSort();
           State.rounds = generateRounds(State.players);
@@ -3076,7 +3281,7 @@ function handleRosterUpload(e) {
 
         let level = "Beginner";
         let price = basePrices.Beginner;
-        if (rawLevel.includes("pro") || rawLevel.includes("advanced") || rawLevel.includes("expert")) {
+        if (rawLevel.includes("pro") || rawLevel.includes("advance") || rawLevel.includes("expert")) {
           level = "Pro";
           price = basePrices.Pro;
         } else if (rawLevel.includes("inter") || rawLevel.includes("mid")) {
@@ -3125,7 +3330,7 @@ function handleRosterUpload(e) {
             if (isCaptain || isViceCaptain) {
               isSold = true;
               status = "sold";
-              finalPrice = AUCTION_LIMITS.captainPrice; // Same base price for captain and vice captain when allocated
+              finalPrice = price; // Same base price for captain and vice captain when allocated
             }
           }
         }
@@ -3226,12 +3431,20 @@ function renderConfigModule() {
   if (!State.config) return;
   document.getElementById("cfg-timer-duration").value = State.config.timerDuration || 15;
   document.getElementById("cfg-max-budget").value = State.config.maxBudget || AUCTION_LIMITS.teamBudget;
-  document.getElementById("cfg-max-squad").value = State.config.maxSquadSize || 10;
+  
+  // Calculate dynamic validation values based on current active players and teams
+  const configService = new TournamentConfigService();
+  const dynamicConfig = configService.getConfig();
+  document.getElementById("cfg-min-squad").value = dynamicConfig.minPlayersPerTeam;
+  document.getElementById("cfg-max-squad").value = dynamicConfig.maxPlayersPerTeam;
+  document.getElementById("cfg-min-male").value = dynamicConfig.male.min;
+  document.getElementById("cfg-max-male").value = dynamicConfig.male.max;
+  document.getElementById("cfg-min-female").value = dynamicConfig.female.min;
+  document.getElementById("cfg-max-female").value = dynamicConfig.female.max;
+
   document.getElementById("cfg-unsold-handling").value = State.config.unsoldHandling || "return";
-  document.getElementById("cfg-max-male").value = State.config.maxMalePerTeam !== undefined ? State.config.maxMalePerTeam : 7;
-  document.getElementById("cfg-max-female").value = State.config.maxFemalePerTeam !== undefined ? State.config.maxFemalePerTeam : 3;
-  document.getElementById("cfg-base-pro").value = State.config.basePrices ? State.config.basePrices.Pro : 8;
-  document.getElementById("cfg-base-inter").value = State.config.basePrices ? State.config.basePrices.Intermediate : 5;
+  document.getElementById("cfg-base-pro").value = State.config.basePrices ? State.config.basePrices.Pro : 12;
+  document.getElementById("cfg-base-inter").value = State.config.basePrices ? State.config.basePrices.Intermediate : 7;
   document.getElementById("cfg-base-begin").value = State.config.basePrices ? State.config.basePrices.Beginner : AUCTION_LIMITS.basePrices.Beginner;
   document.getElementById("cfg-auto-advance").checked = !!State.config.autoAdvance;
 }
@@ -3242,10 +3455,7 @@ function saveAuctionConfig(e) {
 
   State.config.timerDuration = parseInt(document.getElementById("cfg-timer-duration").value);
   State.config.maxBudget = parseFloat(document.getElementById("cfg-max-budget").value);
-  State.config.maxSquadSize = parseInt(document.getElementById("cfg-max-squad").value);
   State.config.unsoldHandling = document.getElementById("cfg-unsold-handling").value;
-  State.config.maxMalePerTeam = parseInt(document.getElementById("cfg-max-male").value);
-  State.config.maxFemalePerTeam = parseInt(document.getElementById("cfg-max-female").value);
 
   State.config.basePrices = {
     Pro: parseFloat(document.getElementById("cfg-base-pro").value),

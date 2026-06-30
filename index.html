@@ -236,7 +236,7 @@
           <div id="card-smashfest" class="sel-card smash-card">
             <div class="sel-info">
               <div class="sel-sport-icon smash-icon">🏸</div>
-              <h3 class="sel-card-title">1234</h3>
+              <h3 class="sel-card-title">SmashFest</h3>
               <div class="sel-tag smash-tag">Ultimate Badminton Challenge</div>
               <p class="sel-card-desc">Compete, bid and dominate<br>the badminton arena.</p>
               <button class="sel-enter-btn">ENTER &nbsp;→</button>
@@ -1097,8 +1097,11 @@
 
                   <div class="form-row">
                     <div class="form-group">
-                      <label>Max Squad Size per Team</label>
-                      <input type="number" id="cfg-max-squad" min="2" max="50" required>
+                      <label>Squad Size per Team (Min - Max)</label>
+                      <div style="display: flex; gap: 10px;">
+                        <input type="number" id="cfg-min-squad" readonly style="background: rgba(255,255,255,0.05); color: #888;">
+                        <input type="number" id="cfg-max-squad" readonly style="background: rgba(255,255,255,0.05); color: #888;">
+                      </div>
                     </div>
                     <div class="form-group">
                       <label>Unsold Player Handling</label>
@@ -1111,12 +1114,18 @@
 
                   <div class="form-row">
                     <div class="form-group">
-                      <label>Max Male Players per Team</label>
-                      <input type="number" id="cfg-max-male" min="0" required>
+                      <label>Male Players per Team (Min - Max)</label>
+                      <div style="display: flex; gap: 10px;">
+                        <input type="number" id="cfg-min-male" readonly style="background: rgba(255,255,255,0.05); color: #888;">
+                        <input type="number" id="cfg-max-male" readonly style="background: rgba(255,255,255,0.05); color: #888;">
+                      </div>
                     </div>
                     <div class="form-group">
-                      <label>Max Female Players per Team</label>
-                      <input type="number" id="cfg-max-female" min="0" required>
+                      <label>Female Players per Team (Min - Max)</label>
+                      <div style="display: flex; gap: 10px;">
+                        <input type="number" id="cfg-min-female" readonly style="background: rgba(255,255,255,0.05); color: #888;">
+                        <input type="number" id="cfg-max-female" readonly style="background: rgba(255,255,255,0.05); color: #888;">
+                      </div>
                     </div>
                   </div>
 

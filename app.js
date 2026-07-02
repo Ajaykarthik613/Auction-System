@@ -78,96 +78,55 @@ function teamTreeEscape(str) {
   return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
 
-function findRealEmpId(name) {
-  const map = window.IMAGE_MAP_OVERRIDE || {};
-  if (!name) return null;
-  const lowerName = name.toLowerCase();
-  const cleanName = lowerName.replace(/[^a-z0-9]/g, "");
-  const filenames = Object.entries(map);
+function normalizeImageId(value) {
+  if (value === null || value === undefined || value === "") return "";
+  return String(value).trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
 
-  const getCleanFilename = (fn) => {
-    let base = fn.toLowerCase();
-    while (base.endsWith('.png') || base.endsWith('.jpg') || base.endsWith('.jpeg') || base.endsWith('.jfif') || base.endsWith('.pdf')) {
-      base = base.substring(0, base.lastIndexOf('.'));
-    }
-    return base.replace(/^k[- ]?\d+/, "").replace(/[^a-z0-9]/g, "");
-  };
+function pickBestImageMatch(matches, targetId) {
+  if (!matches.length) return null;
 
-  // 1. Hardcoded custom rules for spelling exceptions
-  if (lowerName.includes("balamurugan") || lowerName.includes("balamurgan")) {
-    const entry = filenames.find(([empId, fn]) => fn.toLowerCase().includes("balamurgan"));
-    if (entry) return entry[0];
-  }
-  if (lowerName.includes("shajakhan") || lowerName.includes("shahja")) {
-    const entry = filenames.find(([empId, fn]) => fn.toLowerCase().includes("shahja"));
-    if (entry) return entry[0];
-  }
-  if (lowerName.includes("inbaarunraj")) {
-    const entry = filenames.find(([empId, fn]) => fn.toLowerCase().includes("inbaarunraj"));
-    if (entry) return entry[0];
-  }
-  if (lowerName.includes("hamsavarthanan") || lowerName.includes("hamsavarathanan")) {
-    const entry = filenames.find(([empId, fn]) => fn.toLowerCase().includes("hamsavarathanan") || fn.toLowerCase().includes("hamsavarthanan"));
-    if (entry) return entry[0];
-  }
-  if (lowerName.includes("aswin") || lowerName.includes("ashwin")) {
-    const entry = filenames.find(([empId, fn]) => fn.toLowerCase().includes("ashwin") || fn.toLowerCase().includes("aswin"));
-    if (entry) return entry[0];
-  }
-  if (lowerName.includes("arthi")) {
-    const entry = filenames.find(([empId, fn]) => fn.toLowerCase().includes("arthi"));
-    if (entry) return entry[0];
-  }
+  const normalizedTarget = normalizeImageId(targetId);
+  const scored = matches.map(([key, filename]) => {
+    const normalizedKey = normalizeImageId(key);
+    const normalizedValue = normalizeImageId(filename);
+    let score = 0;
 
-  // 2. Exact or substring match on clean names (without extension)
-  let matchedEntry = filenames.find(([empId, filename]) => {
-    const cleanFn = getCleanFilename(filename);
-    return cleanFn.includes(cleanName) || cleanName.includes(cleanFn);
+    if (normalizedKey === normalizedTarget) score += 100;
+    else if (normalizedKey.startsWith(normalizedTarget)) score += 80;
+    else if (normalizedTarget.startsWith(normalizedKey)) score += 70;
+
+    if (normalizedValue === normalizedTarget) score += 90;
+    else if (normalizedValue.startsWith(normalizedTarget)) score += 70;
+    else if (normalizedTarget.startsWith(normalizedValue)) score += 60;
+
+    return {
+      key,
+      filename,
+      score,
+      keyLength: normalizedKey.length,
+      valueLength: normalizedValue.length
+    };
   });
-  if (matchedEntry) return matchedEntry[0];
 
-  // 3. Split name parts match (all parts >= 3 chars must match somewhere in the filename)
-  const nameParts = lowerName.split(/[\s\.]+/).filter(part => part.length >= 3);
-  if (nameParts.length > 0) {
-    matchedEntry = filenames.find(([empId, filename]) => {
-      const cleanFn = getCleanFilename(filename);
-      return nameParts.every(part => cleanFn.includes(part));
-    });
-    if (matchedEntry) return matchedEntry[0];
-  }
+  scored.sort((a, b) => b.score - a.score || a.keyLength - b.keyLength || a.valueLength - b.valueLength);
+  return scored[0] || null;
+}
 
-  // 4. Match by first name + first letter of second name
-  if (nameParts.length >= 2) {
-    const firstName = nameParts[0];
-    const secondInitial = nameParts[1][0];
-    matchedEntry = filenames.find(([empId, filename]) => {
-      const cleanFn = getCleanFilename(filename);
-      return cleanFn.startsWith(firstName) && cleanFn.includes(secondInitial);
-    });
-    if (matchedEntry) return matchedEntry[0];
-  }
+function findRealEmpId(empIdOrName) {
+  const map = window.IMAGE_MAP_OVERRIDE || {};
+  const target = normalizeImageId(empIdOrName);
+  if (!target) return null;
 
-  // 5. Match by exact first name match (e.g. MOHANRAJ should match "mohanraj" exact file over "mohanraj_rangasamy")
-  const firstName = nameParts[0];
-  if (firstName && firstName.length >= 4) {
-    // Try exact clean filename match first
-    matchedEntry = filenames.find(([empId, filename]) => {
-      const cleanFn = getCleanFilename(filename);
-      return cleanFn === firstName;
-    });
-    if (matchedEntry) return matchedEntry[0];
+  const matches = Object.entries(map).filter(([key, filename]) => {
+    const normalizedKey = normalizeImageId(key);
+    const normalizedValue = normalizeImageId(filename);
+    return normalizedKey === target || normalizedKey.startsWith(target) || normalizedValue === target || normalizedValue.startsWith(target);
+  });
 
-    // Otherwise match unique substring
-    const matches = filenames.filter(([empId, filename]) => {
-      const cleanFn = getCleanFilename(filename);
-      return cleanFn.includes(firstName);
-    });
-    if (matches.length === 1) {
-      return matches[0][0];
-    }
-  }
-
-  return null;
+  if (!matches.length) return null;
+  const best = pickBestImageMatch(matches, target);
+  return best ? best.key : null;
 }
 
 function getEmpIdCandidates(empId) {
@@ -210,58 +169,21 @@ function getEmpIdCandidates(empId) {
 function getPhoto(name, empId) {
   const map = window.IMAGE_MAP_OVERRIDE || {};
 
-  // 1. Try matching by Emp ID first (important for Excel-imported rosters)
   const idCandidates = getEmpIdCandidates(empId);
   for (const candidate of idCandidates) {
-    if (map[candidate]) return map[candidate];
-    if (map[candidate.replace(/^K/, "")]) return map[candidate.replace(/^K/, "")];
+    const normalizedCandidate = normalizeImageId(candidate);
+    if (!normalizedCandidate) continue;
 
-    for (const [key, value] of Object.entries(map)) {
-      const keyCandidates = getEmpIdCandidates(key);
-      const valueCandidates = getEmpIdCandidates(value);
-      if (keyCandidates.includes(candidate) || valueCandidates.includes(candidate)) {
-        return value;
-      }
+    const matches = Object.entries(map).filter(([key, filename]) => {
+      const normalizedKey = normalizeImageId(key);
+      const normalizedValue = normalizeImageId(filename);
+      return normalizedKey === normalizedCandidate || normalizedKey.startsWith(normalizedCandidate) || normalizedValue === normalizedCandidate || normalizedValue.startsWith(normalizedCandidate);
+    });
+
+    if (matches.length) {
+      const best = pickBestImageMatch(matches, normalizedCandidate);
+      if (best) return best.filename;
     }
-  }
-
-  // 2. Try resolving the real Employee ID by name from the map
-  const realId = findRealEmpId(name);
-  if (realId && map[realId]) {
-    return map[realId];
-  }
-
-  // 3. Fallback to hardcoded name-based rule mapping (matching original getPhoto exact filenames)
-  if (name) {
-    const l = name.toLowerCase();
-    if (l.includes("arun") && !l.includes("inbaarunraj")) return "K1244_Arun.pdf";
-    if (l.includes("praveen")) return "K1002_Praveen_Mantapam.png";
-    if (l.includes("raja") && l.includes("murukesh")) return "K1038_Rajamurukesh_Dhandapani.jpeg";
-    if (l.includes("sampath")) return "K1171_Sampath.jpeg";
-    if (l.includes("imran")) return "K1203_Imran Naseer Mohamed Ibrahim.jpg";
-    if (l.includes("ajaykarthik")) return "K1243_Ajaykarthik.jpeg";
-    if (l.includes("dhanush")) return "K1131_Dhanush Shankar.jpg";
-    if (l.includes("vinush")) return "K1164_vinush.jpg";
-    if (l.includes("balamurugan")) return "K1212_Balamurgan.jpg";
-    if (l.includes("dani")) return "K1134_Dani Allwinson_D.JPG";
-    if (l.includes("parthasarathi")) return "K1053_Parthasarathi_Nagarajan.png";
-    if (l.includes("aswin") || l.includes("ashwin")) return "K1162_Ashwin.jpg";
-    if (l.includes("ramkumar")) return "K1056_Ramkumar-removebg-preview.png";
-    if (l.includes("muhesh")) return "K1137_Muhesh Kumar.JPG";
-    if (l.includes("sathya") && !l.includes("sathyan")) return "K1197_Sathya Moorthy Kanthapalam.jpg";
-    if (l.includes("subhash") || l.includes("subash")) return "K1245_Subash.JPG";
-    if (l.includes("muthukumar")) return "K1001_Muthukumar_Palanisamy.png";
-    if (l.includes("senthilkumar")) return "K1026_Senthilkumar Viswanathan.png";
-    if (l.includes("leonard")) return "K1191_leonard.jfif";
-    if (l.includes("rubyland")) return "K1222_Rubyland.jpeg";
-    if (l.includes("sathyan")) return "K1201_Sathyan Kesavan.jpg";
-    if (l.includes("sridhar")) return "K1196_Sridhar Raj Selvarajan.jpg";
-    if (l.includes("imthiyas")) return "K1186_Mohammed Imthiyas.JPG";
-    if (l.includes("dharanidharan")) return "K1168_Dharanidharan.jpg";
-    if (l.includes("durairaj")) return "K1059_Durairaj.jpg";
-    if (l.includes("sridharan")) return "K1046_Sridharan.png";
-    if (l.includes("sudarshan")) return "K1153_Sudarshan.jpeg";
-    if (l.includes("naveen")) return "K1158_Naveen.jpg";
   }
 
   return "default.png";
@@ -318,29 +240,26 @@ function getSmashFestRequirements() {
     minPlayers: 16,
     maxPlayers: 16,
     maxProPlayers: 2,
-    male: { min: 10, max: 11 },
+    male: { min: 11, max: 11 },
     female: { min: 5, max: 6 },
     maleLevels: {
       Pro: { min: 2, max: 2 },
       Intermediate: { min: 5, max: 5 },
-      Beginner: { min: 3, max: 4 }
+      Beginner: { min: 4, max: 4 }
     },
     femaleLevels: {
       Pro: { min: 0, max: 0 },
-      Intermediate: { min: 1, max: 2 },
+      Intermediate: { min: 2, max: 2 },
       Beginner: { min: 4, max: 4 }
     },
     intermediateGenderSplit: {
       male: { min: 5, max: 5 },
-      female: { min: 1, max: 2 }
+      female: { min: 2, max: 2 }
     },
     beginnerGenderSplit: {
-      male: { min: 3, max: 4 },
-      female: { min: 4, max: 4 },
-      maleFourPlayerTeams: 1,
-      femaleFourPlayerTeams: 999
-    },
-    maxTeamsWithFiveFemales: 1
+      male: { min: 4, max: 4 },
+      female: { min: 4, max: 4 }
+    }
   };
 }
 
@@ -485,21 +404,9 @@ const AuctionValidator = {
 
       const projectedSize = currentSize + 1;
       if (projectedSize === rules.maxPlayers) {
-        const isValidFinalComposition = (nextMale === 10 && nextFemale === 6) || (nextMale === 11 && nextFemale === 5);
+        const isValidFinalComposition = nextMale === rules.male.max && nextFemale === rules.female.min;
         if (!isValidFinalComposition) {
-          return { valid: false, code: "GENDER_COMPOSITION_INVALID", message: `${State.teams[teamCode].name || teamCode}: Final squad must be 10 men + 6 women or 11 men + 5 women.` };
-        }
-      }
-
-      if (nextGender === "female" && nextFemale === 5) {
-        const teamsAtFiveFemales = Object.keys(State.teams).filter(code => {
-          if (code === teamCode) return false;
-          const count = State.players.filter(p => p.isSold && p.teamName === code && (p.gender || "Female").toLowerCase() === "female").length;
-          return count === 5;
-        }).length;
-
-        if (teamsAtFiveFemales >= rules.maxTeamsWithFiveFemales) {
-          return { valid: false, code: "FEMALE_FIVE_TEAM_LIMIT", message: `${State.teams[teamCode].name || teamCode}: Only one team can finish with 5 female players.` };
+          return { valid: false, code: "GENDER_COMPOSITION_INVALID", message: `${State.teams[teamCode].name || teamCode}: Final squad must be ${rules.male.max} men + ${rules.female.min} women to complete 16 players.` };
         }
       }
 
@@ -512,12 +419,12 @@ const AuctionValidator = {
         const nextIntermediateMale = nextGender === "male" ? currentIntermediateMale + 1 : currentIntermediateMale;
         const nextIntermediateFemale = nextGender === "female" ? currentIntermediateFemale + 1 : currentIntermediateFemale;
 
-        if (nextGender === "male" && nextIntermediateMale > rules.intermediateGenderSplit.male.max) {
-          return { valid: false, code: "INTERMEDIATE_MALE_LIMIT_REACHED", message: `${State.teams[teamCode].name || teamCode}: Intermediate male quota is limited to ${rules.intermediateGenderSplit.male.max} per team.` };
+        if (nextGender === "male" && (nextIntermediateMale < rules.intermediateGenderSplit.male.min || nextIntermediateMale > rules.intermediateGenderSplit.male.max)) {
+          return { valid: false, code: "INTERMEDIATE_MALE_LIMIT_REACHED", message: `${State.teams[teamCode].name || teamCode}: Intermediate male quota must be exactly ${rules.intermediateGenderSplit.male.max} per team.` };
         }
 
         if (nextGender === "female" && (nextIntermediateFemale < rules.intermediateGenderSplit.female.min || nextIntermediateFemale > rules.intermediateGenderSplit.female.max)) {
-          return { valid: false, code: "INTERMEDIATE_FEMALE_LIMIT_REACHED", message: `${State.teams[teamCode].name || teamCode}: Intermediate female quota must stay between ${rules.intermediateGenderSplit.female.min} and ${rules.intermediateGenderSplit.female.max} per team.` };
+          return { valid: false, code: "INTERMEDIATE_FEMALE_LIMIT_REACHED", message: `${State.teams[teamCode].name || teamCode}: Intermediate female quota must be exactly ${rules.intermediateGenderSplit.female.max} per team.` };
         }
       }
 
@@ -525,40 +432,12 @@ const AuctionValidator = {
         const nextBeginnerMale = nextGender === "male" ? currentBeginnerMale + 1 : currentBeginnerMale;
         const nextBeginnerFemale = nextGender === "female" ? currentBeginnerFemale + 1 : currentBeginnerFemale;
 
-        if (nextGender === "male") {
-          if (nextBeginnerMale > rules.beginnerGenderSplit.male.max) {
-            return { valid: false, code: "BEGINNER_MALE_LIMIT_REACHED", message: `${State.teams[teamCode].name || teamCode}: Beginner male quota cannot exceed ${rules.beginnerGenderSplit.male.max} per team.` };
-          }
-
-          if (nextBeginnerMale === 4) {
-            const teamsAtFour = Object.keys(State.teams).filter(code => {
-              if (code === teamCode) return false;
-              const count = State.players.filter(p => p.isSold && p.teamName === code && normalizeLevel(p.level) === "Beginner" && (p.gender || "Male").toLowerCase() === "male").length;
-              return count >= 4;
-            }).length;
-
-            if (teamsAtFour >= rules.beginnerGenderSplit.maleFourPlayerTeams) {
-              return { valid: false, code: "BEGINNER_MALE_TEAM_LIMIT_REACHED", message: `${State.teams[teamCode].name || teamCode}: Only ${rules.beginnerGenderSplit.maleFourPlayerTeams} teams can take 4 beginner male players.` };
-            }
-          }
+        if (nextGender === "male" && (nextBeginnerMale < rules.beginnerGenderSplit.male.min || nextBeginnerMale > rules.beginnerGenderSplit.male.max)) {
+          return { valid: false, code: "BEGINNER_MALE_LIMIT_REACHED", message: `${State.teams[teamCode].name || teamCode}: Beginner male quota must be exactly ${rules.beginnerGenderSplit.male.max} per team.` };
         }
 
-        if (nextGender === "female") {
-          if (nextBeginnerFemale > rules.beginnerGenderSplit.female.max) {
-            return { valid: false, code: "BEGINNER_FEMALE_LIMIT_REACHED", message: `${State.teams[teamCode].name || teamCode}: Beginner female quota cannot exceed ${rules.beginnerGenderSplit.female.max} per team.` };
-          }
-
-          if (nextBeginnerFemale === 4) {
-            const teamsAtFour = Object.keys(State.teams).filter(code => {
-              if (code === teamCode) return false;
-              const count = State.players.filter(p => p.isSold && p.teamName === code && normalizeLevel(p.level) === "Beginner" && (p.gender || "Female").toLowerCase() === "female").length;
-              return count >= 4;
-            }).length;
-
-            if (teamsAtFour >= rules.beginnerGenderSplit.femaleFourPlayerTeams) {
-              return { valid: false, code: "BEGINNER_FEMALE_TEAM_LIMIT_REACHED", message: `${State.teams[teamCode].name || teamCode}: Only ${rules.beginnerGenderSplit.femaleFourPlayerTeams} teams can take 4 beginner female players.` };
-            }
-          }
+        if (nextGender === "female" && (nextBeginnerFemale < rules.beginnerGenderSplit.female.min || nextBeginnerFemale > rules.beginnerGenderSplit.female.max)) {
+          return { valid: false, code: "BEGINNER_FEMALE_LIMIT_REACHED", message: `${State.teams[teamCode].name || teamCode}: Beginner female quota must be exactly ${rules.beginnerGenderSplit.female.max} per team.` };
         }
       }
     }

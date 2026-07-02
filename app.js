@@ -106,6 +106,71 @@ function getNameTokens(value) {
     .filter(token => token && !/^K?\d+$/.test(token));
 }
 
+function getCommonPrefixLength(a, b) {
+  let i = 0;
+  while (i < a.length && i < b.length && a[i] === b[i]) i++;
+  return i;
+}
+
+function getEditDistanceWithinLimit(a, b, limit = 2) {
+  if (Math.abs(a.length - b.length) > limit) return limit + 1;
+
+  let previous = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const current = [i];
+    let rowMin = current[0];
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      current[j] = Math.min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + cost);
+      rowMin = Math.min(rowMin, current[j]);
+    }
+    if (rowMin > limit) return limit + 1;
+    previous = current;
+  }
+  return previous[b.length];
+}
+
+function isCloseNameToken(token, fileToken) {
+  if (token.length < 5 || fileToken.length < 5) return false;
+  if (getCommonPrefixLength(token, fileToken) >= 6) return true;
+  return getEditDistanceWithinLimit(token, fileToken, 2) <= 2;
+}
+
+function scoreNameImageMatch(name, filename) {
+  const nameTokens = getNameTokens(name);
+  if (!nameTokens.length) return 0;
+
+  const filenameTokens = getNameTokens(filename);
+  const normalizedName = normalizeImageId(name);
+  const normalizedFilename = normalizeImageId(filename);
+  const strippedFilename = normalizedFilename.replace(/^K\d+/, "");
+  let score = 0;
+
+  nameTokens.forEach((token, idx) => {
+    const normalizedToken = normalizeImageId(token);
+    const exactToken = filenameTokens.includes(token);
+    const looseToken = normalizedToken.length >= 4 && normalizedFilename.includes(normalizedToken);
+    const reverseLooseToken = normalizedToken.length >= 4 && filenameTokens.some(fileToken => {
+      const normalizedFileToken = normalizeImageId(fileToken);
+      return normalizedFileToken.length >= 4 && normalizedToken.startsWith(normalizedFileToken);
+    });
+    const closeToken = filenameTokens.some(fileToken => isCloseNameToken(normalizedToken, normalizeImageId(fileToken))) ||
+      isCloseNameToken(normalizedToken, strippedFilename);
+
+    if (exactToken) score += idx === 0 ? 45 : 30;
+    else if (closeToken) score += idx === 0 ? 40 : 24;
+    else if (looseToken || reverseLooseToken) score += idx === 0 ? 30 : 18;
+  });
+
+  if (strippedFilename.length >= 4 && (normalizedFilename.includes(normalizedName) || normalizedName.includes(strippedFilename))) {
+    score += 50;
+  } else if (strippedFilename.length >= 6 && normalizedName.length >= 6 && getEditDistanceWithinLimit(normalizedName, strippedFilename, 2) <= 2) {
+    score += 50;
+  }
+
+  return score;
+}
+
 function pickBestImageMatch(matches, targetId) {
   if (!matches.length) return null;
 
@@ -138,22 +203,25 @@ function pickBestImageMatch(matches, targetId) {
 
 function findRealEmpId(empIdOrName) {
   const target = normalizeImageId(empIdOrName);
-  const nameTokens = getNameTokens(empIdOrName);
   if (!target) return null;
 
   const entries = getImageEntries();
-  const matches = entries.filter(([key, filename]) => {
+  const directMatches = entries.filter(([key, filename]) => {
     const normalizedKey = normalizeImageId(key);
-    const normalizedValue = normalizeImageId(filename);
-    const filenameTokens = getNameTokens(filename);
-    const requiredNameTokens = nameTokens.length > 1 ? nameTokens.slice(0, 2) : nameTokens;
-    const tokenMatches = requiredNameTokens.length > 0 && requiredNameTokens.every(token => filenameTokens.includes(token));
-    return normalizedKey === target || imageStartsWithEmployeeId(filename, target) || tokenMatches;
+    return normalizedKey === target || imageStartsWithEmployeeId(filename, target);
   });
 
-  if (!matches.length) return null;
-  const best = pickBestImageMatch(matches, target);
-  return best ? best.key : null;
+  if (directMatches.length) {
+    const best = pickBestImageMatch(directMatches, target);
+    return best ? best.key : null;
+  }
+
+  const nameMatches = entries
+    .map(([key, filename]) => ({ key, filename, score: scoreNameImageMatch(empIdOrName, filename) }))
+    .filter(match => match.score >= 30)
+    .sort((a, b) => b.score - a.score || a.filename.length - b.filename.length);
+
+  return nameMatches[0]?.key || null;
 }
 
 function getEmpIdCandidates(empId) {
@@ -267,30 +335,53 @@ function isSmashFestTournament() {
   return State.tournament === "smashfest";
 }
 
-function getSmashFestRequirements() {
+function getActiveRosterPlayers() {
+  return State.players.filter(p => p && p.isRegistered);
+}
+
+function getDynamicTournamentRequirements() {
+  const activeTeams = Math.max(1, Object.keys(State.teams || {}).length);
+  const activePlayers = getActiveRosterPlayers();
+  const levels = ["Pro", "Intermediate", "Beginner"];
+
+  const splitLimit = count => ({
+    min: Math.floor(count / activeTeams),
+    max: Math.ceil(count / activeTeams)
+  });
+
+  const levelLimits = {};
+  const genderLevelLimits = { male: {}, female: {} };
+  levels.forEach(level => {
+    const byLevel = activePlayers.filter(p => normalizeLevel(p.level) === level);
+    levelLimits[level] = splitLimit(byLevel.length);
+    genderLevelLimits.male[level] = splitLimit(byLevel.filter(p => getNormalizedGender(p) === "male").length);
+    genderLevelLimits.female[level] = splitLimit(byLevel.filter(p => getNormalizedGender(p) === "female").length);
+  });
+
   return {
-    minPlayers: 16,
-    maxPlayers: 16,
-    maxProPlayers: 2,
-    male: { min: 11, max: 11 },
-    female: { min: 5, max: 6 },
-    maleLevels: {
-      Pro: { min: 2, max: 2 },
-      Intermediate: { min: 5, max: 5 },
-      Beginner: { min: 4, max: 4 }
-    },
-    femaleLevels: {
-      Pro: { min: 0, max: 0 },
-      Intermediate: { min: 2, max: 2 },
-      Beginner: { min: 4, max: 4 }
-    },
+    minPlayers: splitLimit(activePlayers.length).min,
+    maxPlayers: splitLimit(activePlayers.length).max,
+    male: splitLimit(activePlayers.filter(p => getNormalizedGender(p) === "male").length),
+    female: splitLimit(activePlayers.filter(p => getNormalizedGender(p) === "female").length),
+    levels: levelLimits,
+    genderLevels: genderLevelLimits
+  };
+}
+
+function getSmashFestRequirements() {
+  const dynamic = getDynamicTournamentRequirements();
+  return {
+    ...dynamic,
+    maxProPlayers: dynamic.levels.Pro.max,
+    maleLevels: dynamic.genderLevels.male,
+    femaleLevels: dynamic.genderLevels.female,
     intermediateGenderSplit: {
-      male: { min: 5, max: 5 },
-      female: { min: 2, max: 2 }
+      male: dynamic.genderLevels.male.Intermediate,
+      female: dynamic.genderLevels.female.Intermediate
     },
     beginnerGenderSplit: {
-      male: { min: 4, max: 4 },
-      female: { min: 4, max: 4 }
+      male: dynamic.genderLevels.male.Beginner,
+      female: dynamic.genderLevels.female.Beginner
     }
   };
 }
@@ -313,17 +404,7 @@ function getNormalizedGender(player) {
 
 function getReserveRequirementBuckets() {
   const levels = ["Pro", "Intermediate", "Beginner"];
-
-  if (isSmashFestTournament()) {
-    const rules = getSmashFestRequirements();
-    return levels.flatMap(level => ([
-      { key: `male${level}`, label: `Male ${level}`, gender: "male", level, min: rules.maleLevels[level]?.min || 0 },
-      { key: `female${level}`, label: `Female ${level}`, gender: "female", level, min: rules.femaleLevels[level]?.min || 0 }
-    ]));
-  }
-
-  const teamCount = Math.max(1, Object.keys(State.teams || {}).length);
-  const registeredPlayers = State.players.filter(p => p && p.isRegistered && !p.isCaptain);
+  const requirements = getDynamicTournamentRequirements();
 
   return levels.flatMap(level => ([
     {
@@ -331,22 +412,20 @@ function getReserveRequirementBuckets() {
       label: `Male ${level}`,
       gender: "male",
       level,
-      min: Math.floor(registeredPlayers.filter(p => getNormalizedGender(p) === "male" && normalizeLevel(p.level) === level).length / teamCount)
+      min: requirements.genderLevels.male[level]?.min || 0
     },
     {
       key: `female${level}`,
       label: `Female ${level}`,
       gender: "female",
       level,
-      min: Math.floor(registeredPlayers.filter(p => getNormalizedGender(p) === "female" && normalizeLevel(p.level) === level).length / teamCount)
+      min: requirements.genderLevels.female[level]?.min || 0
     }
   ]));
 }
 
 function getReserveTargetSize(teamCode, currentTeamPlayers) {
-  if (isSmashFestTournament()) return getSmashFestRequirements().minPlayers;
-  const validation = teamValidator.validateTeam(teamCode, currentTeamPlayers);
-  return validation.maxAllowed || currentTeamPlayers.length;
+  return getDynamicTournamentRequirements().minPlayers || currentTeamPlayers.length;
 }
 
 function formatReserveBreakdown(breakdown) {
@@ -412,44 +491,31 @@ const AuctionValidator = {
       return { valid: false, code: "INSUFFICIENT_FUNDS", message: `${State.teams[teamCode].name || teamCode} only has ₹${remainingPurse.toFixed(2)} Lakhs left - insufficient funds!` };
     }
 
-    if (isSmashFestTournament()) {
-      const rules = getSmashFestRequirements();
-      const currentMale = teamPlayers.filter(p => (p.gender || "Male").toLowerCase() === "male").length;
-      const currentFemale = teamPlayers.filter(p => (p.gender || "Female").toLowerCase() === "female").length;
-      const currentSize = teamPlayers.length;
-      const currentPro = teamPlayers.filter(p => normalizeLevel(p.level) === "Pro").length;
-      const currentIntermediateMale = teamPlayers.filter(p => (p.gender || "Male").toLowerCase() === "male" && normalizeLevel(p.level) === "Intermediate").length;
-      const currentIntermediateFemale = teamPlayers.filter(p => (p.gender || "Female").toLowerCase() === "female" && normalizeLevel(p.level) === "Intermediate").length;
-      const currentBeginnerMale = teamPlayers.filter(p => (p.gender || "Male").toLowerCase() === "male" && normalizeLevel(p.level) === "Beginner").length;
-      const currentBeginnerFemale = teamPlayers.filter(p => (p.gender || "Female").toLowerCase() === "female" && normalizeLevel(p.level) === "Beginner").length;
+    const dynamicRules = getDynamicTournamentRequirements();
+    const nextGender = getNormalizedGender(player);
+    const nextLevel = normalizeLevel(player.level);
+    const projectedPlayers = [...teamPlayers, player];
+    const projectedSize = projectedPlayers.length;
+    const projectedGenderCount = projectedPlayers.filter(p => getNormalizedGender(p) === nextGender).length;
+    const projectedLevelCount = projectedPlayers.filter(p => normalizeLevel(p.level) === nextLevel).length;
+    const projectedGenderLevelCount = projectedPlayers.filter(p => getNormalizedGender(p) === nextGender && normalizeLevel(p.level) === nextLevel).length;
 
-      if (currentSize + 1 > rules.maxPlayers) {
-        return { valid: false, code: "TEAM_LIMIT_REACHED", message: `${State.teams[teamCode].name || teamCode}: Maximum squad size of ${rules.maxPlayers} players reached.` };
-      }
+    if (projectedSize > dynamicRules.maxPlayers) {
+      return { valid: false, code: "TEAM_LIMIT_REACHED", message: `${State.teams[teamCode].name || teamCode}: Maximum dynamic squad size is ${dynamicRules.maxPlayers} players.` };
+    }
 
-      const nextGender = (player.gender || "Male").toLowerCase() === "female" ? "female" : "male";
-      const nextMale = nextGender === "male" ? currentMale + 1 : currentMale;
-      const nextFemale = nextGender === "female" ? currentFemale + 1 : currentFemale;
-      if (nextMale > rules.male.max || nextFemale > rules.female.max) {
-        return { valid: false, code: "GENDER_LIMIT_REACHED", message: `${State.teams[teamCode].name || teamCode}: Gender composition limit reached for this team.` };
-      }
+    if (projectedGenderCount > dynamicRules[nextGender].max) {
+      const label = nextGender === "female" ? "female" : "male";
+      return { valid: false, code: "GENDER_LIMIT_REACHED", message: `${State.teams[teamCode].name || teamCode}: Maximum ${label} players allowed is ${dynamicRules[nextGender].max}.` };
+    }
 
-      const projectedSize = currentSize + 1;
-      if (projectedSize === rules.maxPlayers) {
-        const isValidFinalComposition = nextMale === rules.male.max && nextFemale === rules.female.min;
-        if (!isValidFinalComposition) {
-          return { valid: false, code: "GENDER_COMPOSITION_INVALID", message: `${State.teams[teamCode].name || teamCode}: Final squad must be ${rules.male.max} men + ${rules.female.min} women to complete 16 players.` };
-        }
-      }
+    if (projectedLevelCount > dynamicRules.levels[nextLevel].max) {
+      return { valid: false, code: "CATEGORY_LIMIT_REACHED", message: `${State.teams[teamCode].name || teamCode}: Maximum ${nextLevel} players allowed is ${dynamicRules.levels[nextLevel].max}.` };
+    }
 
-      const nextLevel = normalizeLevel(player.level);
-      if (nextLevel === "Pro" && currentPro + 1 > rules.maxProPlayers) {
-        return { valid: false, code: "PRO_LIMIT_REACHED", message: `${State.teams[teamCode].name || teamCode}: Maximum Pro/Advanced players per team is ${rules.maxProPlayers}.` };
-      }
-
-      // Live bidding should stay flexible for roster building. The final squad composition
-      // is validated when the auction is completed, so intermediate/beginner slot checks
-      // should not block a normal bid during the auction itself.
+    if (projectedGenderLevelCount > dynamicRules.genderLevels[nextGender][nextLevel].max) {
+      const label = nextGender === "female" ? "Female" : "Male";
+      return { valid: false, code: "CATEGORY_GENDER_LIMIT_REACHED", message: `${State.teams[teamCode].name || teamCode}: Maximum ${label} ${nextLevel} players allowed is ${dynamicRules.genderLevels[nextGender][nextLevel].max}.` };
     }
 
     const validationResult = teamValidator.validateTeam(teamCode, teamPlayers, player);
@@ -925,8 +991,6 @@ const State = {
         ...stored,
         ...defaultConfig
       };
-      if (stored.soundEffectsEnabled !== undefined) this.config.soundEffectsEnabled = stored.soundEffectsEnabled;
-      if (stored.voiceAnnouncerEnabled !== undefined) this.config.voiceAnnouncerEnabled = stored.voiceAnnouncerEnabled;
     } else {
       this.config = { ...defaultConfig };
     }
@@ -2276,7 +2340,8 @@ class TournamentConfigService {
   }
 
   loadConfig() {
-    const activePlayers = State.players.length; 
+    const activeRoster = getActiveRosterPlayers();
+    const activePlayers = activeRoster.length;
     const activeTeams = Object.keys(State.teams).length || 1;
 
     this.config.totalPlayers = activePlayers;
@@ -2285,8 +2350,8 @@ class TournamentConfigService {
     this.config.minPlayersPerTeam = Math.floor(activePlayers / activeTeams);
     this.config.maxPlayersPerTeam = Math.ceil(activePlayers / activeTeams);
 
-    const totalMale = State.players.filter(p => (p.gender || "Male").toLowerCase().startsWith("m")).length;
-    const totalFemale = State.players.filter(p => (p.gender || "Male").toLowerCase().startsWith("f")).length;
+    const totalMale = activeRoster.filter(p => getNormalizedGender(p) === "male").length;
+    const totalFemale = activeRoster.filter(p => getNormalizedGender(p) === "female").length;
 
     this.config.male.min = Math.floor(totalMale / activeTeams);
     this.config.male.max = Math.ceil(totalMale / activeTeams);
@@ -2294,9 +2359,9 @@ class TournamentConfigService {
     this.config.female.min = Math.floor(totalFemale / activeTeams);
     this.config.female.max = Math.ceil(totalFemale / activeTeams);
 
-    const totalPro = State.players.filter(p => p.level === "Pro").length;
-    const totalInter = State.players.filter(p => p.level === "Intermediate").length;
-    const totalBeginner = State.players.filter(p => p.level === "Beginner").length;
+    const totalPro = activeRoster.filter(p => normalizeLevel(p.level) === "Pro").length;
+    const totalInter = activeRoster.filter(p => normalizeLevel(p.level) === "Intermediate").length;
+    const totalBeginner = activeRoster.filter(p => normalizeLevel(p.level) === "Beginner").length;
 
     this.config.categories.Advanced.min = Math.floor(totalPro / activeTeams);
     this.config.categories.Advanced.max = Math.ceil(totalPro / activeTeams);
@@ -2393,16 +2458,12 @@ class TeamValidator {
     
     const size = players.length;
     
-    let maxAllowedForThisTeam = dist.baseSize;
+    let maxAllowedForThisTeam = config.maxPlayersPerTeam || dist.baseSize;
     const isCurrentlyLarge = currentPlayers.length >= dist.largeSize;
-    if (dist.largeSize > dist.baseSize) {
+    if (!config.maxPlayersPerTeam && dist.largeSize > dist.baseSize) {
        if (isCurrentlyLarge || globalState.largeTeamsCount < dist.maxLargeTeams) {
          maxAllowedForThisTeam = dist.largeSize;
        }
-    }
-
-    if (config.maxPlayersPerTeam && maxAllowedForThisTeam > config.maxPlayersPerTeam) {
-      maxAllowedForThisTeam = config.maxPlayersPerTeam;
     }
 
     let teamSizeValid = true;

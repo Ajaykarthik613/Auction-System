@@ -415,31 +415,9 @@ const AuctionValidator = {
         return { valid: false, code: "PRO_LIMIT_REACHED", message: `${State.teams[teamCode].name || teamCode}: Maximum Pro/Advanced players per team is ${rules.maxProPlayers}.` };
       }
 
-      if (nextLevel === "Intermediate") {
-        const nextIntermediateMale = nextGender === "male" ? currentIntermediateMale + 1 : currentIntermediateMale;
-        const nextIntermediateFemale = nextGender === "female" ? currentIntermediateFemale + 1 : currentIntermediateFemale;
-
-        if (nextGender === "male" && (nextIntermediateMale < rules.intermediateGenderSplit.male.min || nextIntermediateMale > rules.intermediateGenderSplit.male.max)) {
-          return { valid: false, code: "INTERMEDIATE_MALE_LIMIT_REACHED", message: `${State.teams[teamCode].name || teamCode}: Intermediate male quota must be exactly ${rules.intermediateGenderSplit.male.max} per team.` };
-        }
-
-        if (nextGender === "female" && (nextIntermediateFemale < rules.intermediateGenderSplit.female.min || nextIntermediateFemale > rules.intermediateGenderSplit.female.max)) {
-          return { valid: false, code: "INTERMEDIATE_FEMALE_LIMIT_REACHED", message: `${State.teams[teamCode].name || teamCode}: Intermediate female quota must be exactly ${rules.intermediateGenderSplit.female.max} per team.` };
-        }
-      }
-
-      if (nextLevel === "Beginner") {
-        const nextBeginnerMale = nextGender === "male" ? currentBeginnerMale + 1 : currentBeginnerMale;
-        const nextBeginnerFemale = nextGender === "female" ? currentBeginnerFemale + 1 : currentBeginnerFemale;
-
-        if (nextGender === "male" && (nextBeginnerMale < rules.beginnerGenderSplit.male.min || nextBeginnerMale > rules.beginnerGenderSplit.male.max)) {
-          return { valid: false, code: "BEGINNER_MALE_LIMIT_REACHED", message: `${State.teams[teamCode].name || teamCode}: Beginner male quota must be exactly ${rules.beginnerGenderSplit.male.max} per team.` };
-        }
-
-        if (nextGender === "female" && (nextBeginnerFemale < rules.beginnerGenderSplit.female.min || nextBeginnerFemale > rules.beginnerGenderSplit.female.max)) {
-          return { valid: false, code: "BEGINNER_FEMALE_LIMIT_REACHED", message: `${State.teams[teamCode].name || teamCode}: Beginner female quota must be exactly ${rules.beginnerGenderSplit.female.max} per team.` };
-        }
-      }
+      // Live bidding should stay flexible for roster building. The final squad composition
+      // is validated when the auction is completed, so intermediate/beginner slot checks
+      // should not block a normal bid during the auction itself.
     }
 
     const validationResult = teamValidator.validateTeam(teamCode, teamPlayers, player);
@@ -447,21 +425,6 @@ const AuctionValidator = {
       return { valid: false, code: "LIMIT_REACHED", message: `${State.teams[teamCode].name || teamCode}: ${validationResult.overallReason}` };
     }
 
-    const reserveBudgetResult = calculateReserveBudget(teamCode, player);
-    if (reserveBudgetResult.error) {
-      return { valid: false, code: "CONFIG_ERROR", message: reserveBudgetResult.errorMessage };
-    }
-    const { reserveBudget } = reserveBudgetResult;
-    const remainingPurseAfterBid = remainingPurse - bidAmount;
-    
-    if (remainingPurseAfterBid < reserveBudget) {
-      return { 
-        valid: false, 
-        code: "INSUFFICIENT_REMAINING_BUDGET", 
-        message: `Cannot assign this player.\nRemaining purse after this bid is ₹${remainingPurseAfterBid.toFixed(2)}L, but ₹${reserveBudget.toFixed(2)}L is required to purchase all remaining mandatory players at base price.`
-      };
-    }
-    
     return { valid: true, code: "SUCCESS", message: "Valid" };
   },
   

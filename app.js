@@ -83,6 +83,29 @@ function normalizeImageId(value) {
   return String(value).trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
 
+function isSupportedImageFile(filename) {
+  return /\.(png|jpe?g|jfif|webp|gif)$/i.test(String(filename || "").trim());
+}
+
+function getImageEntries() {
+  const map = window.IMAGE_MAP_OVERRIDE || {};
+  return Object.entries(map).filter(([, filename]) => isSupportedImageFile(filename));
+}
+
+function imageStartsWithEmployeeId(filename, empId) {
+  const target = normalizeImageId(empId);
+  const normalizedFilename = normalizeImageId(filename);
+  return !!target && normalizedFilename.startsWith(target);
+}
+
+function getNameTokens(value) {
+  return String(value || "")
+    .toUpperCase()
+    .replace(/\.[A-Z0-9]+$/i, "")
+    .split(/[^A-Z0-9]+/)
+    .filter(token => token && !/^K?\d+$/.test(token));
+}
+
 function pickBestImageMatch(matches, targetId) {
   if (!matches.length) return null;
 
@@ -114,14 +137,18 @@ function pickBestImageMatch(matches, targetId) {
 }
 
 function findRealEmpId(empIdOrName) {
-  const map = window.IMAGE_MAP_OVERRIDE || {};
   const target = normalizeImageId(empIdOrName);
+  const nameTokens = getNameTokens(empIdOrName);
   if (!target) return null;
 
-  const matches = Object.entries(map).filter(([key, filename]) => {
+  const entries = getImageEntries();
+  const matches = entries.filter(([key, filename]) => {
     const normalizedKey = normalizeImageId(key);
     const normalizedValue = normalizeImageId(filename);
-    return normalizedKey === target || normalizedKey.startsWith(target) || normalizedValue === target || normalizedValue.startsWith(target);
+    const filenameTokens = getNameTokens(filename);
+    const requiredNameTokens = nameTokens.length > 1 ? nameTokens.slice(0, 2) : nameTokens;
+    const tokenMatches = requiredNameTokens.length > 0 && requiredNameTokens.every(token => filenameTokens.includes(token));
+    return normalizedKey === target || imageStartsWithEmployeeId(filename, target) || tokenMatches;
   });
 
   if (!matches.length) return null;
@@ -167,23 +194,28 @@ function getEmpIdCandidates(empId) {
 }
 
 function getPhoto(name, empId) {
-  const map = window.IMAGE_MAP_OVERRIDE || {};
+  const entries = getImageEntries();
 
   const idCandidates = getEmpIdCandidates(empId);
   for (const candidate of idCandidates) {
     const normalizedCandidate = normalizeImageId(candidate);
     if (!normalizedCandidate) continue;
 
-    const matches = Object.entries(map).filter(([key, filename]) => {
+    const matches = entries.filter(([key, filename]) => {
       const normalizedKey = normalizeImageId(key);
-      const normalizedValue = normalizeImageId(filename);
-      return normalizedKey === normalizedCandidate || normalizedKey.startsWith(normalizedCandidate) || normalizedValue === normalizedCandidate || normalizedValue.startsWith(normalizedCandidate);
+      return normalizedKey === normalizedCandidate || imageStartsWithEmployeeId(filename, normalizedCandidate);
     });
 
     if (matches.length) {
       const best = pickBestImageMatch(matches, normalizedCandidate);
       if (best) return best.filename;
     }
+  }
+
+  const realEmpId = findRealEmpId(name);
+  if (realEmpId && realEmpId !== empId) {
+    const photo = getPhoto("", realEmpId);
+    if (photo !== "default.png") return photo;
   }
 
   return "default.png";
@@ -275,6 +307,54 @@ function getTeamSpent(teamCode) {
   return State.players.filter(p => p.teamName === teamCode && p.isSold).reduce((sum, p) => sum + (Number(p.price) || 0), 0);
 }
 
+function getNormalizedGender(player) {
+  return String(player?.gender || "Male").trim().toLowerCase().startsWith("f") ? "female" : "male";
+}
+
+function getReserveRequirementBuckets() {
+  const levels = ["Pro", "Intermediate", "Beginner"];
+
+  if (isSmashFestTournament()) {
+    const rules = getSmashFestRequirements();
+    return levels.flatMap(level => ([
+      { key: `male${level}`, label: `Male ${level}`, gender: "male", level, min: rules.maleLevels[level]?.min || 0 },
+      { key: `female${level}`, label: `Female ${level}`, gender: "female", level, min: rules.femaleLevels[level]?.min || 0 }
+    ]));
+  }
+
+  const teamCount = Math.max(1, Object.keys(State.teams || {}).length);
+  const registeredPlayers = State.players.filter(p => p && p.isRegistered && !p.isCaptain);
+
+  return levels.flatMap(level => ([
+    {
+      key: `male${level}`,
+      label: `Male ${level}`,
+      gender: "male",
+      level,
+      min: Math.floor(registeredPlayers.filter(p => getNormalizedGender(p) === "male" && normalizeLevel(p.level) === level).length / teamCount)
+    },
+    {
+      key: `female${level}`,
+      label: `Female ${level}`,
+      gender: "female",
+      level,
+      min: Math.floor(registeredPlayers.filter(p => getNormalizedGender(p) === "female" && normalizeLevel(p.level) === level).length / teamCount)
+    }
+  ]));
+}
+
+function getReserveTargetSize(teamCode, currentTeamPlayers) {
+  if (isSmashFestTournament()) return getSmashFestRequirements().minPlayers;
+  const validation = teamValidator.validateTeam(teamCode, currentTeamPlayers);
+  return validation.maxAllowed || currentTeamPlayers.length;
+}
+
+function formatReserveBreakdown(breakdown) {
+  const required = (breakdown || []).filter(item => item.need > 0);
+  if (!required.length) return "required remaining players";
+  return required.map(item => `${item.need} ${item.label}`).join(", ");
+}
+
 function calculateReserveBudget(teamCode, hypotheticalPlayer = null) {
   const basePrices = (State.config && State.config.basePrices) ? State.config.basePrices : AUCTION_LIMITS.basePrices;
   if (!basePrices) return { error: true, errorMessage: "Mandatory configuration missing: Base prices must be defined." };
@@ -284,81 +364,33 @@ function calculateReserveBudget(teamCode, hypotheticalPlayer = null) {
     currentTeamPlayers.push(hypotheticalPlayer);
   }
 
-  if (isSmashFestTournament()) {
-    const rules = getSmashFestRequirements();
-    const counts = {
-      male: currentTeamPlayers.filter(p => (p.gender || "Male").toLowerCase() === "male").length,
-      female: currentTeamPlayers.filter(p => (p.gender || "Female").toLowerCase() === "female").length,
-      malePro: currentTeamPlayers.filter(p => (p.gender || "Male").toLowerCase() === "male" && normalizeLevel(p.level) === "Pro").length,
-      maleIntermediate: currentTeamPlayers.filter(p => (p.gender || "Male").toLowerCase() === "male" && normalizeLevel(p.level) === "Intermediate").length,
-      maleBeginner: currentTeamPlayers.filter(p => (p.gender || "Male").toLowerCase() === "male" && normalizeLevel(p.level) === "Beginner").length,
-      femalePro: currentTeamPlayers.filter(p => (p.gender || "Female").toLowerCase() === "female" && normalizeLevel(p.level) === "Pro").length,
-      femaleIntermediate: currentTeamPlayers.filter(p => (p.gender || "Female").toLowerCase() === "female" && normalizeLevel(p.level) === "Intermediate").length,
-      femaleBeginner: currentTeamPlayers.filter(p => (p.gender || "Female").toLowerCase() === "female" && normalizeLevel(p.level) === "Beginner").length
-    };
-
-    const reserveBreakdown = {};
-    let reserveBudget = 0;
-
-    const addRequiredBucket = (label, required, current, priceKey) => {
-      const need = Math.max(0, required - current);
-      if (need > 0) {
-        reserveBreakdown[label] = need;
-        reserveBudget += need * basePrices[priceKey];
-      }
-    };
-
-    addRequiredBucket("malePro", rules.maleLevels.Pro.min, counts.malePro, "Pro");
-    addRequiredBucket("maleIntermediate", rules.maleLevels.Intermediate.min, counts.maleIntermediate, "Intermediate");
-    addRequiredBucket("maleBeginner", rules.maleLevels.Beginner.min, counts.maleBeginner, "Beginner");
-    addRequiredBucket("femalePro", rules.femaleLevels.Pro.min, counts.femalePro, "Pro");
-    addRequiredBucket("femaleIntermediate", rules.femaleLevels.Intermediate.min, counts.femaleIntermediate, "Intermediate");
-    addRequiredBucket("femaleBeginner", rules.femaleLevels.Beginner.min, counts.femaleBeginner, "Beginner");
-
-    const remainingOverall = Math.max(0, rules.minPlayers - currentTeamPlayers.length);
+  const requirementBuckets = getReserveRequirementBuckets();
+  const reserveBreakdown = requirementBuckets.map(bucket => {
+    const current = currentTeamPlayers.filter(p => getNormalizedGender(p) === bucket.gender && normalizeLevel(p.level) === bucket.level).length;
+    const need = Math.max(0, bucket.min - current);
     return {
-      reserveBudget,
-      remainingOverall,
-      breakdown: { ...reserveBreakdown, remainingOverall }
+      ...bucket,
+      current,
+      need,
+      cost: need * (Number(basePrices[bucket.level]) || 0)
     };
-  }
+  });
 
-  const configService = new TournamentConfigService();
-  const config = configService.getConfig();
-  if (!basePrices) return { error: true, errorMessage: "Mandatory configuration missing: Base prices must be defined." };
-
-  const currentPro = currentTeamPlayers.filter(p => p.level === "Pro").length;
-  const currentInter = currentTeamPlayers.filter(p => p.level === "Intermediate").length;
-  const currentBeg = currentTeamPlayers.filter(p => p.level === "Beginner").length;
-
-  const minPro = config.categories?.Advanced?.min;
-  const minInter = config.categories?.Intermediate?.min;
-  const minBeg = config.categories?.Beginner?.min;
-  if (minPro === undefined || minInter === undefined || minBeg === undefined) {
-    return { error: true, errorMessage: "Mandatory configuration missing: Minimum category counts must be defined." };
-  }
-
-  const remPro = Math.max(0, minPro - currentPro);
-  const remInter = Math.max(0, minInter - currentInter);
-  const remBeg = Math.max(0, minBeg - currentBeg);
-
-  const requiredCategorySlots = remPro + remInter + remBeg;
-  const minSquadSize = config.minPlayersPerTeam;
-  if (minSquadSize === undefined) return { error: true, errorMessage: "Mandatory configuration missing: minPlayersPerTeam must be defined." };
-  const remainingOverall = Math.max(0, minSquadSize - currentTeamPlayers.length);
-
-  const flexSlots = Math.max(0, remainingOverall - requiredCategorySlots);
-  const flexPrice = Math.min(basePrices.Pro, basePrices.Intermediate, basePrices.Beginner);
-
-  const reserveBudget = (remPro * basePrices.Pro) +
-                        (remInter * basePrices.Intermediate) +
-                        (remBeg * basePrices.Beginner) +
-                        (flexSlots * flexPrice);
+  const requiredSlots = reserveBreakdown.reduce((sum, item) => sum + item.need, 0);
+  const targetSize = getReserveTargetSize(teamCode, currentTeamPlayers);
+  const remainingOverall = Math.max(0, targetSize - currentTeamPlayers.length);
+  const flexSlots = Math.max(0, remainingOverall - requiredSlots);
+  const validBasePrices = ["Pro", "Intermediate", "Beginner"].map(level => Number(basePrices[level]) || 0).filter(price => price > 0);
+  const cheapestBasePrice = validBasePrices.length ? Math.min(...validBasePrices) : 0;
+  const reserveBudget = reserveBreakdown.reduce((sum, item) => sum + item.cost, 0) + (flexSlots * cheapestBasePrice);
 
   return {
     reserveBudget,
+    targetSize,
     remainingOverall,
-    breakdown: { remPro, remInter, remBeg, flexSlots, flexPrice }
+    flexSlots,
+    flexPrice: cheapestBasePrice,
+    breakdown: reserveBreakdown
   };
 }
 
@@ -423,6 +455,31 @@ const AuctionValidator = {
     const validationResult = teamValidator.validateTeam(teamCode, teamPlayers, player);
     if (!validationResult.valid) {
       return { valid: false, code: "LIMIT_REACHED", message: `${State.teams[teamCode].name || teamCode}: ${validationResult.overallReason}` };
+    }
+
+    const projectedPlayer = {
+      ...player,
+      price: bidAmount,
+      teamName: teamCode,
+      isSold: true,
+      status: "sold"
+    };
+    const reserve = calculateReserveBudget(teamCode, projectedPlayer);
+    if (reserve.error) {
+      return { valid: false, code: "RESERVE_CONFIG_MISSING", message: reserve.errorMessage };
+    }
+
+    const remainingAfterBid = remainingPurse - bidAmount;
+    if (remainingAfterBid + 0.0001 < reserve.reserveBudget) {
+      const maxAllowedBid = Math.max(0, remainingPurse - reserve.reserveBudget);
+      const teamName = State.teams[teamCode].name || teamCode;
+      const breakdownText = formatReserveBreakdown(reserve.breakdown);
+      const flexText = reserve.flexSlots > 0 ? ` plus ${reserve.flexSlots} flexible slot${reserve.flexSlots === 1 ? "" : "s"}` : "";
+      return {
+        valid: false,
+        code: "RESERVE_BUDGET_REQUIRED",
+        message: `${teamName} must keep ₹${reserve.reserveBudget.toFixed(2)}L to complete the squad at base price (${breakdownText}${flexText}). Maximum allowed bid now is ₹${maxAllowedBid.toFixed(2)}L.`
+      };
     }
 
     return { valid: true, code: "SUCCESS", message: "Valid" };
@@ -927,7 +984,7 @@ const State = {
 
         // Resolve and update to real Employee ID
         const explicitEmpId = player.playerId || player.empId;
-        const realEmpId = explicitEmpId || findRealEmpId(name) || empId;
+        const realEmpId = findRealEmpId(name) || explicitEmpId || empId;
         player.playerId = realEmpId;
         player.imageName = getPhoto(name, realEmpId);
 

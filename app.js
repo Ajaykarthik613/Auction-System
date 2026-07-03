@@ -78,212 +78,186 @@ function teamTreeEscape(str) {
   return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
 
-function normalizeImageId(value) {
-  if (value === null || value === undefined || value === "") return "";
-  return String(value).trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+const PHOTO_NAME_OVERRIDES = {
+  ajaykarthikdharmalingam: "K1243",
+  girishnarayanankutty: "K1282",
+  jecinthafranchanarajan: "K1283",
+  kiruthigaramanathansakthi: "K1287"
+};
+
+function normalizePhotoText(value) {
+  return String(value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
-function isSupportedImageFile(filename) {
-  return /\.(png|jpe?g|jfif|webp|gif)$/i.test(String(filename || "").trim());
+function getCleanPhotoFilename(filename) {
+  let base = String(filename || "").toLowerCase();
+  while (base.endsWith('.png') || base.endsWith('.jpg') || base.endsWith('.jpeg') || base.endsWith('.jfif') || base.endsWith('.pdf')) {
+    base = base.substring(0, base.lastIndexOf('.'));
+  }
+  return base.replace(/^k[- ]?\d+/, "").replace(/[^a-z0-9]/g, "");
 }
 
-function getImageEntries() {
+function getPhotoFilenameParts(filename) {
+  let base = String(filename || "").toLowerCase();
+  while (base.endsWith('.png') || base.endsWith('.jpg') || base.endsWith('.jpeg') || base.endsWith('.jfif') || base.endsWith('.pdf')) {
+    base = base.substring(0, base.lastIndexOf('.'));
+  }
+  return base
+    .replace(/^k[- ]?\d+/, "")
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+}
+
+function photoPartsMatchName(filenameParts, nameParts) {
+  if (!filenameParts.length || !nameParts.length) return false;
+  if (filenameParts[0] !== nameParts[0]) return false;
+  if (filenameParts.length > nameParts.length) return false;
+  return filenameParts.every((part, idx) => part === nameParts[idx] || (part.length === 1 && nameParts[idx] && nameParts[idx][0] === part));
+}
+
+function findRealEmpId(name) {
   const map = window.IMAGE_MAP_OVERRIDE || {};
-  return Object.entries(map).filter(([, filename]) => isSupportedImageFile(filename));
-}
+  if (!name) return null;
+  const lowerName = name.toLowerCase();
+  const cleanName = normalizePhotoText(name);
+  const filenames = Object.entries(map);
 
-function imageStartsWithEmployeeId(filename, empId) {
-  const target = normalizeImageId(empId);
-  const normalizedFilename = normalizeImageId(filename);
-  return !!target && normalizedFilename.startsWith(target);
-}
-
-function getNameTokens(value) {
-  return String(value || "")
-    .toUpperCase()
-    .replace(/\.[A-Z0-9]+$/i, "")
-    .split(/[^A-Z0-9]+/)
-    .filter(token => token && !/^K?\d+$/.test(token));
-}
-
-function getCommonPrefixLength(a, b) {
-  let i = 0;
-  while (i < a.length && i < b.length && a[i] === b[i]) i++;
-  return i;
-}
-
-function getEditDistanceWithinLimit(a, b, limit = 2) {
-  if (Math.abs(a.length - b.length) > limit) return limit + 1;
-
-  let previous = Array.from({ length: b.length + 1 }, (_, i) => i);
-  for (let i = 1; i <= a.length; i++) {
-    const current = [i];
-    let rowMin = current[0];
-    for (let j = 1; j <= b.length; j++) {
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      current[j] = Math.min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + cost);
-      rowMin = Math.min(rowMin, current[j]);
-    }
-    if (rowMin > limit) return limit + 1;
-    previous = current;
+  if (PHOTO_NAME_OVERRIDES[cleanName] && map[PHOTO_NAME_OVERRIDES[cleanName]]) {
+    return PHOTO_NAME_OVERRIDES[cleanName];
   }
-  return previous[b.length];
-}
 
-function isCloseNameToken(token, fileToken) {
-  if (token.length < 5 || fileToken.length < 5) return false;
-  if (getCommonPrefixLength(token, fileToken) >= 6) return true;
-  return getEditDistanceWithinLimit(token, fileToken, 2) <= 2;
-}
+  // 1. Hardcoded custom rules for spelling exceptions
+  if (lowerName.startsWith("balamurugan") || lowerName.includes("balamurgan")) {
+    const entry = filenames.find(([empId, fn]) => fn.toLowerCase().includes("balamurgan"));
+    if (entry) return entry[0];
+  }
+  if (lowerName.includes("shajakhan") || lowerName.includes("shahja")) {
+    const entry = filenames.find(([empId, fn]) => fn.toLowerCase().includes("shahja"));
+    if (entry) return entry[0];
+  }
+  if (lowerName.includes("inbaarunraj")) {
+    const entry = filenames.find(([empId, fn]) => fn.toLowerCase().includes("inbaarunraj"));
+    if (entry) return entry[0];
+  }
+  if (lowerName.includes("hamsavarthanan") || lowerName.includes("hamsavarathanan")) {
+    const entry = filenames.find(([empId, fn]) => fn.toLowerCase().includes("hamsavarathanan") || fn.toLowerCase().includes("hamsavarthanan"));
+    if (entry) return entry[0];
+  }
+  if (lowerName.startsWith("aswin ") || lowerName.startsWith("ashwin ")) {
+    const entry = filenames.find(([empId, fn]) => fn.toLowerCase().includes("ashwin") || fn.toLowerCase().includes("aswin"));
+    if (entry) return entry[0];
+  }
+  if (lowerName.includes("arthi")) {
+    const entry = filenames.find(([empId, fn]) => fn.toLowerCase().includes("arthi"));
+    if (entry) return entry[0];
+  }
 
-function scoreNameImageMatch(name, filename) {
-  const nameTokens = getNameTokens(name);
-  if (!nameTokens.length) return 0;
+  // 2. Strong full-name matches on clean names (without extension)
+  let matchedEntry = filenames.find(([empId, filename]) => {
+    const cleanFn = getCleanPhotoFilename(filename);
+    return cleanFn === cleanName;
+  });
+  if (matchedEntry) return matchedEntry[0];
 
-  const filenameTokens = getNameTokens(filename);
-  const normalizedName = normalizeImageId(name);
-  const normalizedFilename = normalizeImageId(filename);
-  const strippedFilename = normalizedFilename.replace(/^K\d+/, "");
-  let score = 0;
-
-  nameTokens.forEach((token, idx) => {
-    const normalizedToken = normalizeImageId(token);
-    const exactToken = filenameTokens.includes(token);
-    const looseToken = normalizedToken.length >= 4 && normalizedFilename.includes(normalizedToken);
-    const reverseLooseToken = normalizedToken.length >= 4 && filenameTokens.some(fileToken => {
-      const normalizedFileToken = normalizeImageId(fileToken);
-      return normalizedFileToken.length >= 4 && normalizedToken.startsWith(normalizedFileToken);
+  // 3. Split name parts match (all parts >= 3 chars must match somewhere in the filename)
+  const allNameParts = lowerName.split(/[\s\.]+/).filter(Boolean);
+  const nameParts = allNameParts.filter(part => part.length >= 3);
+  if (nameParts.length > 0) {
+    matchedEntry = filenames.find(([empId, filename]) => {
+      const cleanFn = getCleanPhotoFilename(filename);
+      return nameParts.every(part => cleanFn.includes(part));
     });
-    const closeToken = filenameTokens.some(fileToken => isCloseNameToken(normalizedToken, normalizeImageId(fileToken))) ||
-      isCloseNameToken(normalizedToken, strippedFilename);
-
-    if (exactToken) score += idx === 0 ? 45 : 30;
-    else if (closeToken) score += idx === 0 ? 40 : 24;
-    else if (looseToken || reverseLooseToken) score += idx === 0 ? 30 : 18;
-  });
-
-  if (strippedFilename.length >= 4 && (normalizedFilename.includes(normalizedName) || normalizedName.includes(strippedFilename))) {
-    score += 50;
-  } else if (strippedFilename.length >= 6 && normalizedName.length >= 6 && getEditDistanceWithinLimit(normalizedName, strippedFilename, 2) <= 2) {
-    score += 50;
+    if (matchedEntry) return matchedEntry[0];
   }
 
-  return score;
-}
-
-function pickBestImageMatch(matches, targetId) {
-  if (!matches.length) return null;
-
-  const normalizedTarget = normalizeImageId(targetId);
-  const scored = matches.map(([key, filename]) => {
-    const normalizedKey = normalizeImageId(key);
-    const normalizedValue = normalizeImageId(filename);
-    let score = 0;
-
-    if (normalizedKey === normalizedTarget) score += 100;
-    else if (normalizedKey.startsWith(normalizedTarget)) score += 80;
-    else if (normalizedTarget.startsWith(normalizedKey)) score += 70;
-
-    if (normalizedValue === normalizedTarget) score += 90;
-    else if (normalizedValue.startsWith(normalizedTarget)) score += 70;
-    else if (normalizedTarget.startsWith(normalizedValue)) score += 60;
-
-    return {
-      key,
-      filename,
-      score,
-      keyLength: normalizedKey.length,
-      valueLength: normalizedValue.length
-    };
-  });
-
-  scored.sort((a, b) => b.score - a.score || a.keyLength - b.keyLength || a.valueLength - b.valueLength);
-  return scored[0] || null;
-}
-
-function findRealEmpId(empIdOrName) {
-  const target = normalizeImageId(empIdOrName);
-  if (!target) return null;
-
-  const entries = getImageEntries();
-  const directMatches = entries.filter(([key, filename]) => {
-    const normalizedKey = normalizeImageId(key);
-    return normalizedKey === target || imageStartsWithEmployeeId(filename, target);
-  });
-
-  if (directMatches.length) {
-    const best = pickBestImageMatch(directMatches, target);
-    return best ? best.key : null;
+  // 4. Match abbreviated file names, e.g. "Sandhiya S" for "Sandhiya Sivakumar".
+  if (allNameParts.length > 1) {
+    matchedEntry = filenames.find(([empId, filename]) => photoPartsMatchName(getPhotoFilenameParts(filename), allNameParts));
+    if (matchedEntry) return matchedEntry[0];
   }
 
-  const nameMatches = entries
-    .map(([key, filename]) => ({ key, filename, score: scoreNameImageMatch(empIdOrName, filename) }))
-    .filter(match => match.score >= 30)
-    .sort((a, b) => b.score - a.score || a.filename.length - b.filename.length);
-
-  return nameMatches[0]?.key || null;
-}
-
-function getEmpIdCandidates(empId) {
-  const candidates = new Set();
-  if (empId === null || empId === undefined || empId === "") return [];
-
-  const raw = String(empId).trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
-  if (!raw) return [];
-
-  candidates.add(raw);
-  const digits = raw.replace(/[^0-9]/g, "");
-  if (digits) {
-    candidates.add(digits);
-    candidates.add(`K${digits}`);
-    const noLeadingZeros = digits.replace(/^0+/, "");
-    if (noLeadingZeros) {
-      candidates.add(noLeadingZeros);
-      candidates.add(`K${noLeadingZeros}`);
+  // 5. Match by exact first name only when it is unambiguous.
+  const firstName = nameParts[0];
+  if (firstName && firstName.length >= 4) {
+    const matches = filenames.filter(([empId, filename]) => {
+      const cleanFn = getCleanPhotoFilename(filename);
+      return cleanFn === firstName;
+    });
+    if (matches.length === 1) {
+      return matches[0][0];
     }
   }
 
-  if (raw.startsWith("SF")) {
-    const num = parseInt(raw.substring(2), 10);
-    if (!isNaN(num)) {
-      candidates.add(`K${num - 1000}`);
-    }
-  }
-
-  if (raw.startsWith("K")) {
-    const num = raw.substring(1).replace(/^0+/, "");
-    if (num) {
-      candidates.add(num);
-      candidates.add(`K${num}`);
-    }
-  }
-
-  return Array.from(candidates);
+  return null;
 }
 
 function getPhoto(name, empId) {
-  const entries = getImageEntries();
+  const map = window.IMAGE_MAP_OVERRIDE || {};
+  const cleanName = normalizePhotoText(name);
 
-  const idCandidates = getEmpIdCandidates(empId);
-  for (const candidate of idCandidates) {
-    const normalizedCandidate = normalizeImageId(candidate);
-    if (!normalizedCandidate) continue;
+  if (PHOTO_NAME_OVERRIDES[cleanName] && map[PHOTO_NAME_OVERRIDES[cleanName]]) {
+    return map[PHOTO_NAME_OVERRIDES[cleanName]];
+  }
 
-    const matches = entries.filter(([key, filename]) => {
-      const normalizedKey = normalizeImageId(key);
-      return normalizedKey === normalizedCandidate || imageStartsWithEmployeeId(filename, normalizedCandidate);
-    });
-
-    if (matches.length) {
-      const best = pickBestImageMatch(matches, normalizedCandidate);
-      if (best) return best.filename;
+  // 1. Try matching by Emp ID prefix
+  if (empId) {
+    let cleanId = String(empId).trim().toUpperCase().replace(/[- ]/g, "");
+    if (cleanId.startsWith("SF")) {
+      const num = parseInt(cleanId.substring(2));
+      if (!isNaN(num)) {
+        cleanId = "K" + (num - 1000);
+      }
+    }
+    if (map[cleanId]) {
+      return map[cleanId];
+    }
+    // Also try matching standard numeric string directly if map key matches
+    if (map["K" + cleanId]) {
+      return map["K" + cleanId];
     }
   }
 
-  const realEmpId = findRealEmpId(name);
-  if (realEmpId && realEmpId !== empId) {
-    const photo = getPhoto("", realEmpId);
-    if (photo !== "default.png") return photo;
+  // 2. Try resolving the real Employee ID by name from the map
+  const realId = findRealEmpId(name);
+  if (realId && map[realId]) {
+    return map[realId];
+  }
+
+  // 3. Fallback to hardcoded name-based rule mapping (matching original getPhoto exact filenames)
+  if (name) {
+    const l = name.toLowerCase();
+    if (l.includes("arun prasanth")) return "K1244_Arun.pdf";
+    if (l.includes("praveen mantapam")) return "K1002_Praveen_Mantapam.png";
+    if (l.includes("praveenkumar moorthi")) return "K1152_Praveen.jpg";
+    if (l.includes("raja") && l.includes("murukesh")) return "K1038_Rajamurukesh_Dhandapani.jpeg";
+    if (l.includes("sampath")) return "K1171_Sampath.jpeg";
+    if (l.includes("imran")) return "K1203_Imran Naseer Mohamed Ibrahim.jpg";
+    if (l.includes("ajaykarthik")) return "K1243_Ajaykarthik Dharmalingam.jpeg";
+    if (l.includes("dhanush")) return "K1131_Dhanush Shankar.jpg";
+    if (l.includes("vinush")) return "K1164_vinush.jpg";
+    if (l.startsWith("balamurugan")) return "K1212_Balamurgan.jpg";
+    if (l.includes("dani")) return "K1134_Dani Allwinson_D.JPG";
+    if (l.includes("parthasarathi")) return "K1053_Parthasarathi_Nagarajan.png";
+    if (l.startsWith("aswin ") || l.startsWith("ashwin ")) return "K1162_Ashwin.jpg";
+    if (l.includes("ramkumar")) return "K1056_Ramkumar-removebg-preview.png";
+    if (l.includes("muhesh")) return "K1137_Muhesh Kumar.jpeg";
+    if (l.includes("sathya") && !l.includes("sathyan")) return "K1197_Sathya Moorthy Kanthapalam.jpg";
+    if (l.includes("subhash") || l.includes("subash")) return "K1245_Subash.JPG";
+    if (l.includes("muthukumar")) return "K1001_Muthukumar_Palanisamy.png";
+    if (l.startsWith("senthilkumar")) return "K1026_Senthilkumar Viswanathan.png";
+    if (l.includes("leonard")) return "K1191_leonard.jfif";
+    if (l.includes("rubyland")) return "K1222_Rubyland.jpeg";
+    if (l.includes("sathyan")) return "K1201_Sathyan Kesavan.jpg";
+    if (l.includes("sridhar raj")) return "K1196_Sridhar Raj Selvarajan.jpg";
+    if (l.includes("imthiyas")) return "K1186_Mohammed Imthiyas.JPG";
+    if (l.includes("dharanidharan")) return "K1168_Dharanidharan.jpg";
+    if (l.includes("durairaj")) return "K1059_Durairaj.jpg";
+    if (l.includes("sridharan")) return "K1026_Sridharan Duraisamy.jpeg";
+    if (l.includes("sudarshan")) return "K1153_Sudarshan.jpeg";
+    if (l.includes("naveen k")) return "K1158_Naveen.jpg";
+    if (l.includes("girish narayanan")) return "K1282_Girish Narayanan Kutty_.jpg";
+    if (l.includes("jecintha franchana")) return "K1283_Jecintha Franchana Rajan_.jpg";
+    if (l.includes("kiruthiga ramanathan")) return "K1287_Kiruthiga Ramanathan.jpg";
   }
 
   return "default.png";
@@ -437,12 +411,12 @@ function formatReserveBreakdown(breakdown) {
 function calculateReserveBudget(teamCode, hypotheticalPlayer = null) {
   const basePrices = (State.config && State.config.basePrices) ? State.config.basePrices : AUCTION_LIMITS.basePrices;
   if (!basePrices) return { error: true, errorMessage: "Mandatory configuration missing: Base prices must be defined." };
-
+  
   const currentTeamPlayers = State.players.filter(p => p.teamName === teamCode && p.isSold);
   if (hypotheticalPlayer) {
     currentTeamPlayers.push(hypotheticalPlayer);
   }
-
+  
   const requirementBuckets = getReserveRequirementBuckets();
   const reserveBreakdown = requirementBuckets.map(bucket => {
     const current = currentTeamPlayers.filter(p => getNormalizedGender(p) === bucket.gender && normalizeLevel(p.level) === bucket.level).length;
@@ -454,7 +428,7 @@ function calculateReserveBudget(teamCode, hypotheticalPlayer = null) {
       cost: need * (Number(basePrices[bucket.level]) || 0)
     };
   });
-
+  
   const requiredSlots = reserveBreakdown.reduce((sum, item) => sum + item.need, 0);
   const targetSize = getReserveTargetSize(teamCode, currentTeamPlayers);
   const remainingOverall = Math.max(0, targetSize - currentTeamPlayers.length);
@@ -462,7 +436,7 @@ function calculateReserveBudget(teamCode, hypotheticalPlayer = null) {
   const validBasePrices = ["Pro", "Intermediate", "Beginner"].map(level => Number(basePrices[level]) || 0).filter(price => price > 0);
   const cheapestBasePrice = validBasePrices.length ? Math.min(...validBasePrices) : 0;
   const reserveBudget = reserveBreakdown.reduce((sum, item) => sum + item.cost, 0) + (flexSlots * cheapestBasePrice);
-
+                        
   return {
     reserveBudget,
     targetSize,
@@ -541,13 +515,13 @@ const AuctionValidator = {
       const teamName = State.teams[teamCode].name || teamCode;
       const breakdownText = formatReserveBreakdown(reserve.breakdown);
       const flexText = reserve.flexSlots > 0 ? ` plus ${reserve.flexSlots} flexible slot${reserve.flexSlots === 1 ? "" : "s"}` : "";
-      return {
-        valid: false,
+      return { 
+        valid: false, 
         code: "RESERVE_BUDGET_REQUIRED",
         message: `${teamName} must keep ₹${reserve.reserveBudget.toFixed(2)}L to complete the squad at base price (${breakdownText}${flexText}). Maximum allowed bid now is ₹${maxAllowedBid.toFixed(2)}L.`
       };
     }
-
+    
     return { valid: true, code: "SUCCESS", message: "Valid" };
   },
   
@@ -912,9 +886,9 @@ const State = {
         const gender = typeof item === "object" ? item.gender : "Male";
         const lv = getLevelInfo(i);
         const empId = "K" + (1000 + i);
-        const realEmpId = findRealEmpId(name) || empId;
+        const realEmpId = findRealEmpId(name);
         return {
-          id: i + 1, playerId: realEmpId, name, gender,
+          id: i + 1, playerId: realEmpId || empId, name, gender,
           imageName: getPhoto(name, realEmpId), price: lv.basePrice, basePrice: lv.basePrice,
           level: lv.level, isSold: false, status: "unauctioned",
           teamName: "", lotteryNumber: 0, isRegistered: true, isCaptain: false
@@ -937,9 +911,9 @@ const State = {
         const gender = typeof item === "object" ? item.gender : "Male";
         const lv = getLevelInfo(i);
         const empId = "K" + (1000 + i);
-        const realEmpId = findRealEmpId(name) || ("SF" + (2000 + i));
+        const realEmpId = findRealEmpId(name);
         return {
-          id: i + 1000, playerId: realEmpId, name, gender,
+          id: i + 1000, playerId: realEmpId || ("SF" + (2000 + i)), name, gender,
           imageName: getPhoto(name, realEmpId), price: lv.basePrice, basePrice: lv.basePrice,
           level: lv.level, isSold: false, status: "unauctioned",
           teamName: "", lotteryNumber: 0, isRegistered: true, isCaptain: false
@@ -1047,9 +1021,8 @@ const State = {
         player.gender = gender;
 
         // Resolve and update to real Employee ID
-        const explicitEmpId = player.playerId || player.empId;
-        const realEmpId = findRealEmpId(name) || explicitEmpId || empId;
-        player.playerId = realEmpId;
+        const realEmpId = findRealEmpId(name);
+        player.playerId = realEmpId || player.playerId || empId;
         player.imageName = getPhoto(name, realEmpId);
 
         const lv = getLevelInfo(i);
@@ -1063,8 +1036,7 @@ const State = {
     } else {
       // Even if lengths don't match (e.g. custom Excel imported roster), ALWAYS update player IDs and photos against the latest IMAGE_MAP
       this.players.forEach((player) => {
-        const explicitEmpId = player.playerId || player.empId;
-        const realEmpId = explicitEmpId || findRealEmpId(player.name);
+        const realEmpId = findRealEmpId(player.name) || player.playerId;
         player.playerId = realEmpId;
         player.imageName = getPhoto(player.name, realEmpId);
       });

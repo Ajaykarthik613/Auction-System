@@ -474,8 +474,19 @@ html, body { height: 100%; font-family: 'Outfit', sans-serif; background: var(--
 
 .revealed-card { background: linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%); }
 .card-player-img { width: 100%; flex: 1 1 auto; object-fit: cover; object-position: top; min-height: 0; }
-.card-player-footer { width: 100%; padding: 6px 8px 8px; display: flex; flex-direction: column; align-items: center; gap: 3px; }
-.card-player-name { font-size: 11px; font-weight: 700; text-align: center; line-height: 1.3; }
+.card-player-footer { width: 100%; min-height: 82px; padding: 6px 8px 13px; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.card-player-name {
+  width: 100%;
+  min-height: 28px;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 .card-lot-num { font-size: 10px; color: var(--text2); }
 .card-meta-row { display: flex; gap: 6px; align-items: center; justify-content: center; flex-wrap: wrap; }
 
@@ -493,7 +504,21 @@ html, body { height: 100%; font-family: 'Outfit', sans-serif; background: var(--
 .tier-beginner-badge     { background: rgba(0,220,255,0.2);  color: var(--accent); }
 .tier-intermediate-badge { background: rgba(160,0,255,0.2);  color: #c084fc; }
 .tier-pro-badge          { background: rgba(255,180,0,0.2);  color: var(--gold); }
-.captain-badge { position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); background: var(--gold); color: #000; font-size: 9px; font-weight: 800; padding: 2px 8px; border-radius: 4px; white-space: nowrap; }
+.captain-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  margin-top: 1px;
+  background: var(--gold);
+  color: #000;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1;
+  padding: 3px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
 
 /* â”€â”€â”€ 5. DETAIL / AUCTION â”€â”€â”€ */
 #view-detail { padding: 24px; }

@@ -602,7 +602,7 @@ function showTournamentInfo() {
       <li><strong>Total Purse:</strong> ₹1.2 Crore (120 Lakhs) per team.</li>
       <li><strong>Squad Size:</strong> Max 10 players.</li>
       <li><strong>Base Prices:</strong> Pro Tier: ₹8L, Intermediate Tier: ₹5L, Beginner Tier: ₹3L.</li>
-      <li><strong>Bidding Increment:</strong> Bids increment by ₹0.5L below ₹20L, and ₹1.0L at or above ₹20L.</li>
+      <li><strong>Bidding Increment:</strong> Bids increment by ₹1.0L below ₹20L, and ₹3.0L at or above ₹20L.</li>
       <li><strong>Captains:</strong> Every team must assign a Captain. Captains cost ₹20L and do not enter the auction pool.</li>
       <li><strong>Unsold Players:</strong> Unsold players can be returned to the pool at the end of the round or marked permanently unsold based on configuration.</li>
     </ul>
@@ -1857,7 +1857,7 @@ function placeBid(team) {
   }
 
   const isFirstBid = !State.selectedTeam;
-  const nextPrice = isFirstBid ? player.price : (player.price + (player.price >= 20 ? 1.0 : 0.5));
+  const nextPrice = isFirstBid ? player.price : (player.price + (player.price >= 20 ? 3.0 : 1.0));
 
   const validationResult = AuctionValidator.validateAll(team, nextPrice);
   if (!validationResult.valid) {
